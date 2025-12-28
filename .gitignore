@@ -1,11 +1,7 @@
 /icons/*
 /appdata/*
 /UI/*
-/app/*
 /static/*
-/requirements.txt
-/Dockerfile
-/docker-compose.yml
 /security.md
 /UI/UX improvement suggestions.md
 /LICENSE

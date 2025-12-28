@@ -1,0 +1,13 @@
+services:
+  mini-ipam:
+    build: .
+    container_name: mini-ipam
+    environment:
+      - DATA_DIR=/data
+      - SECRET_KEY=change-me-to-a-long-random-string
+      - COOKIE_SECURE=false
+    volumes:
+      - ./appdata:/data
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
