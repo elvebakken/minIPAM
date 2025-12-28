@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="minipam.png" alt="Mini-IPAM Logo" width="200">
+
 **A lightweight, modern IP Address Management system built for simplicity and efficiency**
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
@@ -49,7 +51,10 @@
 
 - **Visual Organization**
   - Custom icon upload and management
+  - Multiple icon upload support
+  - Icon normalization (automatic square crop and resize)
   - Predefined icon library
+  - Icon deletion and management
   - Color-coded device types
   - Visual subnet utilization
 
@@ -74,8 +79,11 @@
   - Gateway IP default behavior
   - Reserved IP defaults (network, broadcast, gateway)
 
-- **Data Export**
+- **Data Export & Import**
   - Export all data as JSON
+  - Export assignments in CSV, JSON, or Excel format
+  - Import assignments from CSV, JSON, or Excel files
+  - Filtered exports with search and type filtering
   - Backup and restore capabilities
 
 - **Audit Logging**
@@ -186,6 +194,11 @@ The application provides a RESTful API. Key endpoints include:
 - `GET /api/vlans/{vlan_id}` - Get VLAN details
 - `POST /api/vlans/{vlan_id}/assignments` - Create IP assignment
 - `GET /api/vlans/{vlan_id}/next-available` - Get next available IP
+- `GET /api/vlans/{vlan_id}/assignments/export` - Export assignments (CSV/JSON/Excel)
+- `POST /api/vlans/{vlan_id}/assignments/import` - Import assignments from file
+- `GET /api/icons/list` - List available icons
+- `POST /api/icons/upload-multiple` - Upload multiple icons (admin)
+- `GET /api/audit-logs` - Get audit logs with filtering
 
 For complete API documentation, start the server and visit:
 - Swagger UI: `http://localhost:8080/docs`
