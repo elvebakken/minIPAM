@@ -1303,13 +1303,15 @@ const state = {
             </select>
           </div>
           <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            <button id="nextBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium transition-all duration-200 hover:scale-[1.02]">Next available</button>
-            <button id="addBtn" class="px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 min-h-[44px] text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-              </svg>
-              Add
-            </button>
+            <div class="flex gap-3 flex-1 sm:flex-initial">
+              <button id="nextBtn" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium transition-all duration-200 hover:scale-[1.02]">Next available</button>
+              <button id="addBtn" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 min-h-[44px] text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                Add
+              </button>
+            </div>
             <div class="flex gap-2">
               <div class="relative">
                 <button id="exportBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
@@ -1692,53 +1694,69 @@ const state = {
     const rightDiv = document.createElement("div");
     rightDiv.className = "min-w-[240px]";
     
+    // Combined stats with progress bars aligned on same line
     const statsDiv = document.createElement("div");
-    statsDiv.className = "text-xs text-zinc-400 mb-3 space-y-1";
-    statsDiv.innerHTML = `
-      <div class="flex justify-between items-center">
-        <span>Used:</span>
-        <span class="text-zinc-200 font-medium">${used} (${pct}%)</span>
-      </div>
-      <div class="flex justify-between items-center">
-        <span>Reserved:</span>
-        <span class="text-zinc-200 font-medium">${reserved}</span>
-      </div>
-      <div class="flex justify-between items-center">
-        <span>Free:</span>
-        <span class="text-zinc-200 font-medium">${Math.max(0, total - used - reserved)}</span>
-      </div>
+    statsDiv.className = "text-xs text-zinc-400 mb-3 space-y-1.5";
+    
+    // Used row with label and progress bar
+    const usedRow = document.createElement("div");
+    usedRow.className = "flex items-center gap-2";
+    const usedLabel = document.createElement("div");
+    usedLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    usedLabel.innerHTML = `
+      <span>Used:</span>
+      <span class="text-zinc-200 font-medium">${used} (${pct}%)</span>
     `;
-    rightDiv.appendChild(statsDiv);
-    
-    // Enhanced breakdown with separate bars
-    const breakdownDiv = document.createElement("div");
-    breakdownDiv.className = "space-y-1.5";
-    
-    // Used bar
+    usedRow.appendChild(usedLabel);
     const usedBarDiv = document.createElement("div");
-    usedBarDiv.className = "relative h-2 rounded-full bg-zinc-800 overflow-hidden";
+    usedBarDiv.className = "relative h-2 rounded-full bg-zinc-800 overflow-hidden flex-1";
     const usedBarFill = document.createElement("div");
     usedBarFill.className = "h-2 bg-blue-500";
     usedBarFill.style.width = `${total > 0 ? Math.min(100, (used / total) * 100) : 0}%`;
     usedBarDiv.appendChild(usedBarFill);
-    breakdownDiv.appendChild(usedBarDiv);
+    usedRow.appendChild(usedBarDiv);
+    statsDiv.appendChild(usedRow);
     
-    // Reserved bar (stacked on top of used)
-    if (reserved > 0) {
-      const reservedBarDiv = document.createElement("div");
-      reservedBarDiv.className = "relative h-2 rounded-full bg-zinc-800 overflow-hidden";
-      const reservedBarFill = document.createElement("div");
-      reservedBarFill.className = "h-2 bg-orange-500";
-      reservedBarFill.style.width = `${total > 0 ? Math.min(100, (reserved / total) * 100) : 0}%`;
-      reservedBarDiv.appendChild(reservedBarFill);
-      breakdownDiv.appendChild(reservedBarDiv);
-    }
+    // Reserved row with label and progress bar
+    const reservedRow = document.createElement("div");
+    reservedRow.className = "flex items-center gap-2";
+    const reservedLabel = document.createElement("div");
+    reservedLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    reservedLabel.innerHTML = `
+      <span>Reserved:</span>
+      <span class="text-zinc-200 font-medium">${reserved}</span>
+    `;
+    reservedRow.appendChild(reservedLabel);
+    const reservedBarDiv = document.createElement("div");
+    reservedBarDiv.className = "relative h-2 rounded-full bg-zinc-800 overflow-hidden flex-1";
+    const reservedBarFill = document.createElement("div");
+    reservedBarFill.className = "h-2 bg-orange-500";
+    reservedBarFill.style.width = `${total > 0 ? Math.min(100, (reserved / total) * 100) : 0}%`;
+    reservedBarDiv.appendChild(reservedBarFill);
+    reservedRow.appendChild(reservedBarDiv);
+    statsDiv.appendChild(reservedRow);
     
-    // Overall usage meter
-    const overallMeter = el(meterBar(used, total));
-    breakdownDiv.appendChild(overallMeter);
+    // Free row with label and progress bar
+    const freeRow = document.createElement("div");
+    freeRow.className = "flex items-center gap-2";
+    const freeLabel = document.createElement("div");
+    freeLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    const freeCount = Math.max(0, total - used - reserved);
+    freeLabel.innerHTML = `
+      <span>Free:</span>
+      <span class="text-zinc-200 font-medium">${freeCount}</span>
+    `;
+    freeRow.appendChild(freeLabel);
+    const freeBarDiv = document.createElement("div");
+    freeBarDiv.className = "relative h-2 rounded-full bg-zinc-800 overflow-hidden flex-1";
+    const freeBarFill = document.createElement("div");
+    freeBarFill.className = "h-2 bg-green-500";
+    freeBarFill.style.width = `${total > 0 ? Math.min(100, (freeCount / total) * 100) : 0}%`;
+    freeBarDiv.appendChild(freeBarFill);
+    freeRow.appendChild(freeBarDiv);
+    statsDiv.appendChild(freeRow);
     
-    rightDiv.appendChild(breakdownDiv);
+    rightDiv.appendChild(statsDiv);
     
     wrapper.appendChild(rightDiv);
     container.appendChild(wrapper);
