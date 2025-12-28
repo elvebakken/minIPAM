@@ -29,7 +29,7 @@ from .rate_limit import (
     get_client_ip, check_rate_limit, record_failed_attempt, record_successful_login
 )
 from .ipcalc import parse_network, usable_range, gateway_suggestion, ip_in_subnet, is_network_or_broadcast, next_available_ip
-from .audit import append_audit, utcnow_iso
+from .audit import append_audit, utcnow_iso, read_audit_logs
 
 
 def ulid_like(prefix: str) -> str:
@@ -696,6 +696,23 @@ def export_data(user=Depends(require_role({"admin", "readwrite", "readonly"}))):
     if not path.exists():
         raise HTTPException(status_code=404, detail="data.json missing")
     return FileResponse(str(path), media_type="application/json", filename="data.json")
+
+
+# ---------------- AUDIT LOGS ----------------
+
+@app.get("/api/audit-logs")
+def get_audit_logs(
+    user=Depends(require_user),
+    user_filter: Optional[str] = None,
+    action_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 1000
+):
+    """Get audit logs with optional filtering."""
+    audit_path = DATA_DIR / "audit.log"
+    entries = read_audit_logs(audit_path, user_filter, action_filter, date_from, date_to, limit)
+    return {"entries": entries}
 
 
 # Serve static UI - mount at the end so API routes take precedence

@@ -412,6 +412,7 @@ const state = {
       const id = h.split("/")[2];
       return renderVlanDetail(id);
     }
+    if (h === "/audit-logs") return renderAuditLogs();
     renderVlanList();
   }
   
@@ -526,6 +527,7 @@ const state = {
           <div class="flex-1"></div>
           ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Icon Library</button>' : ''}
           ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Create User</button>' : ''}
+          <button id="auditLogsBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Audit Logs</button>
           <button id="exportBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Export</button>
           <button id="logoutBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Logout</button>
         </div>
@@ -640,7 +642,11 @@ const state = {
     if (createUserBtn) {
       createUserBtn.onclick = () => openCreateUserModal();
     }
-  
+    const auditLogsBtn = tb.querySelector("#auditLogsBtn");
+    if (auditLogsBtn) {
+      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+    }
+
     const content = el(`
       <div class="max-w-6xl mx-auto px-4 py-6">
         <div class="flex items-end justify-between gap-3">
@@ -840,6 +846,10 @@ const state = {
     const createUserBtn = tb.querySelector("#createUserBtn");
     if (createUserBtn) {
       createUserBtn.onclick = () => openCreateUserModal();
+    }
+    const auditLogsBtn = tb.querySelector("#auditLogsBtn");
+    if (auditLogsBtn) {
+      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
     }
 
     const wrap = el(`
@@ -2059,6 +2069,228 @@ const state = {
         setButtonLoading(saveBtn, false);
       }
     };
+  }
+
+  async function renderAuditLogs() {
+    const root = appRoot();
+    root.innerHTML = "";
+    const tb = topbar();
+    root.appendChild(tb);
+
+    tb.querySelector("#logoutBtn").onclick = async () => {
+      const btn = tb.querySelector("#logoutBtn");
+      setButtonLoading(btn, true, "Logout");
+      try {
+        await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+        state.me = null;
+        toast("Logged out", { type: "success" });
+        route();
+      } catch (e) {
+        toast(e.message, { type: "error" });
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    };
+    tb.querySelector("#exportBtn").onclick = () => window.location.href = "/api/export/data";
+    const iconLibraryBtn = tb.querySelector("#iconLibraryBtn");
+    if (iconLibraryBtn) {
+      iconLibraryBtn.onclick = () => openIconLibraryModal();
+    }
+    const createUserBtn = tb.querySelector("#createUserBtn");
+    if (createUserBtn) {
+      createUserBtn.onclick = () => openCreateUserModal();
+    }
+    const auditLogsBtn = tb.querySelector("#auditLogsBtn");
+    if (auditLogsBtn) {
+      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+    }
+
+    const content = el(`
+      <div class="max-w-6xl mx-auto px-4 py-6">
+        <div class="flex items-end justify-between gap-3 mb-6">
+          <div>
+            <div class="text-2xl font-semibold tracking-tight">Audit Logs</div>
+            <div class="text-sm text-zinc-400">View all system activity and changes.</div>
+          </div>
+          <button id="backBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm text-zinc-200 hover:text-zinc-100 min-h-[44px] font-medium">← Back</button>
+        </div>
+
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-6">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">User</label>
+              <input id="userFilter" type="text" placeholder="Filter by user..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">Action</label>
+              <input id="actionFilter" type="text" placeholder="Filter by action..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">Date From</label>
+              <input id="dateFrom" type="date" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 text-sm min-h-[44px]" />
+            </div>
+            <div>
+              <label class="text-xs text-zinc-400 mb-1 block">Date To</label>
+              <input id="dateTo" type="date" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 text-sm min-h-[44px]" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 mt-3">
+            <button id="clearFiltersBtn" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm font-medium min-h-[44px]">Clear Filters</button>
+            <button id="applyFiltersBtn" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm min-h-[44px]">Apply Filters</button>
+          </div>
+        </div>
+
+        <div id="auditLogsContainer" class="space-y-3">
+          <!-- Logs will be loaded here -->
+        </div>
+      </div>
+    `);
+
+    root.appendChild(content);
+    content.querySelector("#backBtn").onclick = () => setRoute("#/");
+
+    let currentFilters = {
+      user: null,
+      action: null,
+      dateFrom: null,
+      dateTo: null
+    };
+
+    async function loadAuditLogs() {
+      const container = content.querySelector("#auditLogsContainer");
+      container.innerHTML = '<div class="text-center py-8">' + spinner("w-6 h-6").outerHTML + '<div class="mt-2 text-zinc-400">Loading audit logs...</div></div>';
+
+      try {
+        const params = new URLSearchParams();
+        if (currentFilters.user) params.append("user_filter", currentFilters.user);
+        if (currentFilters.action) params.append("action_filter", currentFilters.action);
+        if (currentFilters.dateFrom) {
+          // Convert local date to UTC ISO string
+          const date = new Date(currentFilters.dateFrom + "T00:00:00");
+          params.append("date_from", date.toISOString());
+        }
+        if (currentFilters.dateTo) {
+          // Convert local date to UTC ISO string (end of day)
+          const date = new Date(currentFilters.dateTo + "T23:59:59");
+          params.append("date_to", date.toISOString());
+        }
+
+        const res = await api(`/api/audit-logs?${params.toString()}`, { loadingKey: "audit-logs" });
+        renderAuditLogEntries(container, res.entries || []);
+      } catch (e) {
+        container.innerHTML = `<div class="text-center py-8 text-red-400">Failed to load audit logs: ${escapeHtml(e.message)}</div>`;
+        toast(e.message, { type: "error" });
+      }
+    }
+
+    function renderAuditLogEntries(container, entries) {
+      container.innerHTML = "";
+      
+      if (entries.length === 0) {
+        container.appendChild(el(`<div class="text-center py-8 text-zinc-500">No audit log entries found.</div>`));
+        return;
+      }
+
+      for (const entry of entries) {
+        const card = el(`
+          <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:bg-zinc-900/70 transition">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-sm font-medium text-zinc-200">${escapeHtml(entry.user || "unknown")}</span>
+                  <span class="text-xs text-zinc-500">•</span>
+                  <span class="text-xs text-zinc-400">${escapeHtml(entry.action || "")}</span>
+                  <span class="text-xs text-zinc-500">•</span>
+                  <span class="text-xs text-zinc-400">${escapeHtml(entry.entity || "")}</span>
+                </div>
+                <div class="text-xs text-zinc-500">${escapeHtml(entry.ts || "")}</div>
+              </div>
+              ${(entry.before || entry.after) ? `<button class="text-xs px-3 py-1.5 rounded-md border border-zinc-800 hover:bg-zinc-950 min-h-[32px] font-medium" data-show-diff>Show Changes</button>` : ''}
+            </div>
+            ${entry.before || entry.after ? `
+              <div class="mt-3 pt-3 border-t border-zinc-800 hidden" data-diff-view>
+                ${renderDiffView(entry.before, entry.after)}
+              </div>
+            ` : ''}
+          </div>
+        `);
+
+        const showDiffBtn = card.querySelector("[data-show-diff]");
+        if (showDiffBtn) {
+          const diffView = card.querySelector("[data-diff-view]");
+          showDiffBtn.onclick = () => {
+            if (diffView.classList.contains("hidden")) {
+              diffView.classList.remove("hidden");
+              showDiffBtn.textContent = "Hide Changes";
+            } else {
+              diffView.classList.add("hidden");
+              showDiffBtn.textContent = "Show Changes";
+            }
+          };
+        }
+
+        container.appendChild(card);
+      }
+    }
+
+    function renderDiffView(before, after) {
+      if (!before && !after) return "";
+      
+      const beforeStr = before ? JSON.stringify(before, null, 2) : "";
+      const afterStr = after ? JSON.stringify(after, null, 2) : "";
+      
+      if (!before) {
+        return `
+          <div class="space-y-2">
+            <div class="text-xs font-medium text-green-400">Added:</div>
+            <pre class="text-xs bg-green-950/30 border border-green-800/50 rounded p-3 overflow-x-auto text-green-200">${escapeHtml(afterStr)}</pre>
+          </div>
+        `;
+      }
+      
+      if (!after) {
+        return `
+          <div class="space-y-2">
+            <div class="text-xs font-medium text-red-400">Removed:</div>
+            <pre class="text-xs bg-red-950/30 border border-red-800/50 rounded p-3 overflow-x-auto text-red-200">${escapeHtml(beforeStr)}</pre>
+          </div>
+        `;
+      }
+
+      // Simple diff: show before and after side by side
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="space-y-2">
+            <div class="text-xs font-medium text-red-400">Before:</div>
+            <pre class="text-xs bg-red-950/30 border border-red-800/50 rounded p-3 overflow-x-auto text-red-200 max-h-64 overflow-y-auto">${escapeHtml(beforeStr)}</pre>
+          </div>
+          <div class="space-y-2">
+            <div class="text-xs font-medium text-green-400">After:</div>
+            <pre class="text-xs bg-green-950/30 border border-green-800/50 rounded p-3 overflow-x-auto text-green-200 max-h-64 overflow-y-auto">${escapeHtml(afterStr)}</pre>
+          </div>
+        </div>
+      `;
+    }
+
+    content.querySelector("#applyFiltersBtn").onclick = () => {
+      currentFilters.user = content.querySelector("#userFilter").value.trim() || null;
+      currentFilters.action = content.querySelector("#actionFilter").value.trim() || null;
+      currentFilters.dateFrom = content.querySelector("#dateFrom").value || null;
+      currentFilters.dateTo = content.querySelector("#dateTo").value || null;
+      loadAuditLogs();
+    };
+
+    content.querySelector("#clearFiltersBtn").onclick = () => {
+      content.querySelector("#userFilter").value = "";
+      content.querySelector("#actionFilter").value = "";
+      content.querySelector("#dateFrom").value = "";
+      content.querySelector("#dateTo").value = "";
+      currentFilters = { user: null, action: null, dateFrom: null, dateTo: null };
+      loadAuditLogs();
+    };
+
+    // Load initial logs
+    loadAuditLogs();
   }
   
   init();
