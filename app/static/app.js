@@ -527,8 +527,7 @@ const state = {
     return el(`
       <div class="sticky top-0 z-10 bg-zinc-950/80 backdrop-blur border-b border-zinc-800">
         <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <div class="font-semibold tracking-tight">Mini-IPAM</div>
-          <div class="text-xs text-zinc-400">VLAN IP Tracker</div>
+          <a href="#/" id="logoLink" class="cursor-pointer"><img src="/logo.png" alt="Mini-IPAM" class="h-6"></a>
           <div class="flex-1"></div>
           ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Icon Library</button>' : ''}
           ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium flex items-center gap-2 transition-all duration-200">' + 
@@ -652,6 +651,13 @@ const state = {
     const auditLogsBtn = tb.querySelector("#auditLogsBtn");
     if (auditLogsBtn) {
       auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+    }
+    const logoLink = tb.querySelector("#logoLink");
+    if (logoLink) {
+      logoLink.onclick = (e) => {
+        e.preventDefault();
+        setRoute("#/");
+      };
     }
 
     const content = el(`
@@ -884,6 +890,13 @@ const state = {
     const auditLogsBtn = tb.querySelector("#auditLogsBtn");
     if (auditLogsBtn) {
       auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+    }
+    const logoLink = tb.querySelector("#logoLink");
+    if (logoLink) {
+      logoLink.onclick = (e) => {
+        e.preventDefault();
+        setRoute("#/");
+      };
     }
 
     const wrap = el(`
