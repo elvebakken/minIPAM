@@ -462,7 +462,12 @@ const state = {
           <input id="confirmPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button id="save" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm">Save</button>
+          <button id="save" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            Save
+          </button>
         </div>
       </div>
     `);
@@ -525,11 +530,13 @@ const state = {
           <div class="font-semibold tracking-tight">Mini-IPAM</div>
           <div class="text-xs text-zinc-400">VLAN IP Tracker</div>
           <div class="flex-1"></div>
-          ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Icon Library</button>' : ''}
-          ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Create User</button>' : ''}
-          <button id="auditLogsBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Audit Logs</button>
-          <button id="exportBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Export</button>
-          <button id="logoutBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium">Logout</button>
+          ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Icon Library</button>' : ''}
+          ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium flex items-center gap-2 transition-all duration-200">' + 
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' +
+            '<span>Create User</span></button>' : ''}
+          <button id="auditLogsBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Audit Logs</button>
+          <button id="exportBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Export</button>
+          <button id="logoutBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Logout</button>
         </div>
       </div>
     `);
@@ -654,7 +661,12 @@ const state = {
             <div class="text-2xl font-semibold tracking-tight">VLANs</div>
             <div class="text-sm text-zinc-400">Track assigned IPs per subnet.</div>
           </div>
-          <button id="createVlanBtn" class="bg-white text-zinc-900 rounded-lg px-4 py-2.5 font-medium hover:opacity-90 min-h-[44px] text-sm">+ Create VLAN</button>
+          <button id="createVlanBtn" class="bg-white text-zinc-900 rounded-lg px-4 py-2.5 font-medium hover:opacity-90 min-h-[44px] text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create VLAN
+          </button>
         </div>
   
         <div id="cards" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
@@ -698,7 +710,7 @@ const state = {
       const total = v.derived.total_usable;
       const pct = total > 0 ? Math.round((used / total) * 100) : 0;
       const card = el(`
-        <div class="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-4 hover:bg-zinc-900/70 transition">
+        <div class="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-4 hover:bg-zinc-900/70 transition-all duration-200 hover:scale-[1.01] hover:border-zinc-700 animate-fadeIn">
           <button class="w-full text-left" data-card-btn>
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -716,7 +728,12 @@ const state = {
               <div><span class="text-zinc-200">${v.derived.reserved}</span> reserved</div>
             </div>
           </button>
-          <button class="absolute bottom-3 right-3 px-4 py-2.5 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:opacity-90 transition min-h-[44px] min-w-[44px]" data-add-btn>+Add</button>
+          <button class="absolute bottom-3 right-3 px-4 py-2.5 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:opacity-90 transition-all duration-200 hover:scale-[1.02] min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5" data-add-btn>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            <span class="hidden sm:inline">Add</span>
+          </button>
         </div>
       `);
       card.querySelector("[data-card-btn]").onclick = () => setRoute(`#/vlan/${v.id}`);
@@ -739,11 +756,11 @@ const state = {
   
   function modalShell(title, innerHtml) {
     const m = el(`
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60">
-        <div class="w-full h-full sm:h-auto sm:max-w-xl bg-zinc-900 border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 animate-fadeIn">
+        <div class="w-full h-full sm:h-auto sm:max-w-xl bg-zinc-900 border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scaleIn">
           <div class="px-4 sm:px-5 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
             <div class="font-semibold text-lg">${escapeHtml(title)}</div>
-            <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-200 text-xl" id="close">✕</button>
+            <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-200 text-xl transition-all duration-200 hover:scale-110 hover:rotate-90" id="close">✕</button>
           </div>
           <div class="flex-1 overflow-y-auto p-4 sm:p-5">${innerHtml}</div>
         </div>
@@ -774,8 +791,25 @@ const state = {
           </div>
         </div>
         <div class="flex flex-col sm:flex-row justify-end gap-2 pt-2">
-          <button id="cancel" class="min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm font-medium">Cancel</button>
-          <button id="save" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm">${isEdit ? "Save" : "Create"}</button>
+          <button id="cancel" class="min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm font-medium flex items-center gap-2 transition-all duration-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Cancel
+          </button>
+          <button id="save" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
+            ${isEdit ? `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Save
+            ` : `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              Create
+            `}
+          </button>
         </div>
       </div>
     `);
@@ -854,7 +888,12 @@ const state = {
 
     const wrap = el(`
       <div class="max-w-6xl mx-auto px-4 py-6">
-        <button id="back" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm text-zinc-200 hover:text-zinc-100 min-h-[44px] font-medium">← Back</button>
+        <button id="back" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm text-zinc-200 hover:text-zinc-100 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02] flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+          Back
+        </button>
 
         <div id="header" class="mt-4"></div>
 
@@ -866,23 +905,28 @@ const state = {
             </select>
           </div>
           <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            <button id="nextBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium">Next available</button>
-            <button id="addBtn" class="px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 min-h-[44px] text-sm">+ Add</button>
+            <button id="nextBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium transition-all duration-200 hover:scale-[1.02]">Next available</button>
+            <button id="addBtn" class="px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 min-h-[44px] text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              Add
+            </button>
             <div class="flex gap-2">
               <div class="relative">
-                <button id="exportBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2">
+                <button id="exportBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                   </svg>
                   Export
                 </button>
-                <div id="exportMenu" class="hidden absolute top-full mt-1 right-0 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg z-50 min-w-[120px]">
-                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="csv">CSV</button>
-                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="json">JSON</button>
-                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="excel">Excel</button>
+                <div id="exportMenu" class="hidden absolute top-full mt-1 right-0 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg z-50 min-w-[120px] animate-slideUp">
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm transition-all duration-200" data-format="csv">CSV</button>
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm transition-all duration-200" data-format="json">JSON</button>
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm transition-all duration-200" data-format="excel">Excel</button>
                 </div>
               </div>
-              <button id="importBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2">
+              <button id="importBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                 </svg>
@@ -890,7 +934,7 @@ const state = {
               </button>
             </div>
             <div class="flex-1"></div>
-            <button id="viewToggle" class="md:hidden px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm flex items-center justify-center gap-2">
+            <button id="viewToggle" class="md:hidden px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm flex items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02]">
               <span id="viewToggleText">Card View</span>
               <svg id="viewToggleIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
@@ -1272,11 +1316,11 @@ const state = {
   }
   
   function pill(text) {
-    return `<span class="text-xs px-2 py-1 rounded-full border border-zinc-800 bg-zinc-900">${escapeHtml(text)}</span>`;
+    return `<span class="text-xs px-2 py-1 rounded-full border border-zinc-800 bg-zinc-900 transition-colors duration-150">${escapeHtml(text)}</span>`;
   }
   
   function tagChip(t) {
-    return `<span class="text-xs px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-200">${escapeHtml(t)}</span>`;
+    return `<span class="text-xs px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-200 transition-colors duration-150">${escapeHtml(t)}</span>`;
   }
   
   function matchesFilter(a) {
@@ -1339,7 +1383,7 @@ const state = {
       }
 
       const tr = el(`
-        <tr class="border-b border-zinc-900 hover:bg-zinc-900/30">
+        <tr class="border-b border-zinc-900 hover:bg-zinc-900/30 transition-colors duration-150 animate-fadeIn">
           <td class="p-3 mono">${escapeHtml(a.ip)}</td>
           <td class="p-3">${escapeHtml(a.hostname || "")}</td>
           <td class="p-3">${pill(a.type)}</td>
@@ -1351,12 +1395,12 @@ const state = {
           <td class="p-3 text-zinc-300">${escapeHtml((a.notes || "").slice(0, 80))}</td>
           <td class="p-3 text-right">
             <div class="flex flex-row gap-2 items-center justify-end">
-              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center" data-edit title="Edit">
+              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-edit title="Edit">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
               </button>
-              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center" data-del title="Delete">
+              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-del title="Delete">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                 </svg>
@@ -1443,7 +1487,7 @@ const state = {
 
     for (const a of list) {
       const card = el(`
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-3">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-3 transition-all duration-200 hover:border-zinc-700 animate-fadeIn">
           <div class="flex items-start gap-3">
             ${a.icon?.data_base64 ? 
               `<img src="data:${escapeHtml(a.icon.mime_type || "image/png")};base64,${a.icon.data_base64}" class="w-12 h-12 rounded-md border border-zinc-800 object-cover object-center flex-shrink-0" />` :
@@ -1471,13 +1515,13 @@ const state = {
           ` : ''}
           
           <div class="flex gap-2 pt-2 border-t border-zinc-800">
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium" data-edit>
+            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 hover:scale-[1.02]" data-edit>
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
               </svg>
               Edit
             </button>
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium text-red-400" data-del>
+            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium text-red-400 transition-all duration-200 hover:scale-[1.02]" data-del>
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
               </svg>
@@ -1575,8 +1619,18 @@ const state = {
           </select>
         </div>
         <div class="flex justify-end gap-2 pt-2">
-          <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950">Cancel</button>
-          <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90">Create</button>
+          <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center gap-2 transition-all duration-200 min-h-[44px]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Cancel
+          </button>
+          <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 flex items-center gap-2 transition-all duration-200 hover:scale-[1.02] min-h-[44px]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Create
+          </button>
         </div>
       </div>
     `);
@@ -1816,8 +1870,25 @@ const state = {
         </div>
   
         <div class="flex justify-end gap-2 pt-2">
-          <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950">Cancel</button>
-          <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90">${isEdit ? "Save" : "Add"}</button>
+          <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center gap-2 transition-all duration-200 min-h-[44px]">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Cancel
+          </button>
+          <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 flex items-center gap-2 transition-all duration-200 hover:scale-[1.02] min-h-[44px]">
+            ${isEdit ? `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              Save
+            ` : `
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              Add
+            `}
+          </button>
         </div>
       </div>
     `);
