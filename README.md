@@ -117,9 +117,21 @@
    
    Open your browser and navigate to: `http://localhost:8080`
 
-5. **Default Login**
-   - Username: `admin`
-   - Password: `admin` (⚠️ **Change this immediately!**)
+5. **Initial Login**
+   
+   On first run, an admin user is automatically created with a randomly generated password. Check the console output for the credentials:
+   ```
+   ============================================================
+   Mini-IPAM: Initial admin user created
+   ============================================================
+   Username: admin
+   Password: <randomly-generated-password>
+   ============================================================
+   Please log in and change your username and password.
+   ============================================================
+   ```
+   
+   ⚠️ **Important**: Log in immediately and change your username and password!
 
 ### Manual Installation
 
