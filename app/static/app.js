@@ -169,8 +169,9 @@ const state = {
 
   function initToastContainer() {
     if (!toastState.container) {
+      // Position at top on mobile, bottom-right on desktop
       toastState.container = el(`
-        <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none" style="max-width: 400px;"></div>
+        <div class="fixed top-4 right-4 bottom-auto md:bottom-4 md:top-auto z-50 flex flex-col gap-2 pointer-events-none" style="max-width: calc(100vw - 2rem); width: 400px; padding-bottom: env(safe-area-inset-top, 0);"></div>
       `);
       document.body.appendChild(toastState.container);
     }
@@ -223,7 +224,7 @@ const state = {
     const toastEl = el(`
       <div 
         data-toast-id="${id}"
-        class="pointer-events-auto bg-zinc-900 border ${styles.border} rounded-lg shadow-xl overflow-hidden"
+        class="pointer-events-auto bg-zinc-900 border ${styles.border} rounded-lg shadow-xl overflow-hidden touch-pan-y"
         style="animation: slideIn 0.3s ease-out forwards;"
       >
         <div class="flex items-start gap-3 p-3">
@@ -314,6 +315,54 @@ const state = {
     if (closeBtn) {
       closeBtn.onclick = () => dismissToast(id);
     }
+
+    // Swipe-to-dismiss on mobile
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isSwiping = false;
+    
+    toastEl.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      isSwiping = false;
+    }, { passive: true });
+    
+    toastEl.addEventListener('touchmove', (e) => {
+      if (!touchStartX) return;
+      const touchX = e.touches[0].clientX;
+      const touchY = e.touches[0].clientY;
+      const deltaX = touchX - touchStartX;
+      const deltaY = touchY - touchStartY;
+      
+      // Only swipe horizontally if horizontal movement is greater
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
+        isSwiping = true;
+        toastEl.style.transform = `translateX(${deltaX}px)`;
+        toastEl.style.opacity = `${1 - Math.abs(deltaX) / 200}`;
+      }
+    }, { passive: true });
+    
+    toastEl.addEventListener('touchend', (e) => {
+      if (!touchStartX || !isSwiping) {
+        touchStartX = 0;
+        return;
+      }
+      
+      const touchEndX = e.changedTouches[0].clientX;
+      const deltaX = touchEndX - touchStartX;
+      
+      // Dismiss if swiped more than 100px to the right
+      if (deltaX > 100) {
+        dismissToast(id);
+      } else {
+        // Snap back
+        toastEl.style.transform = '';
+        toastEl.style.opacity = '';
+      }
+      
+      touchStartX = 0;
+      isSwiping = false;
+    }, { passive: true });
 
     // Auto-dismiss with progress
     if (duration > 0) {
@@ -446,20 +495,20 @@ const state = {
         </div>
         <div>
           <label class="text-xs text-zinc-400">New Username</label>
-          <input id="newUsername" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="newUsername" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="username" inputmode="text" />
         </div>
         <div>
           <label class="text-xs text-zinc-400">Current Password</label>
-          <input id="currentPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="currentPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="current-password" />
         </div>
         <div>
           <label class="text-xs text-zinc-400">New Password</label>
-          <input id="newPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="newPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="new-password" />
           <div class="text-xs text-zinc-500 mt-1">Must be at least 8 characters</div>
         </div>
         <div>
           <label class="text-xs text-zinc-400">Confirm New Password</label>
-          <input id="confirmPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="confirmPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="new-password" />
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <button id="save" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm flex items-center gap-2 transition-all duration-200 hover:scale-[1.02]">
@@ -522,22 +571,167 @@ const state = {
     return document.getElementById("app");
   }
   
-  function topbar() {
+  // Mobile menu state
+  let mobileMenuOpen = false;
+  let mobileMenuElement = null;
+
+  function closeMobileMenu() {
+    if (mobileMenuElement) {
+      mobileMenuElement.classList.remove("translate-x-0");
+      mobileMenuElement.classList.add("translate-x-full");
+      setTimeout(() => {
+        if (mobileMenuElement) {
+          mobileMenuElement.remove();
+          mobileMenuElement = null;
+        }
+      }, 300);
+      mobileMenuOpen = false;
+      document.body.style.overflow = "";
+    }
+  }
+
+  function openMobileMenu(buttonHandlers) {
+    if (mobileMenuOpen) {
+      closeMobileMenu();
+      return;
+    }
+
     const isAdmin = state.me && state.me.role === "admin";
-    return el(`
-      <div class="sticky top-0 z-10 bg-zinc-950/80 backdrop-blur border-b border-zinc-800">
-        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <a href="#/" id="logoLink" class="cursor-pointer"><img src="/logo.png" alt="Mini-IPAM" class="h-6"></a>
-          <div class="flex-1"></div>
-          ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Icon Library</button>' : ''}
-          ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium flex items-center gap-2 transition-all duration-200">' + 
-            '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' +
-            '<span>Create User</span></button>' : ''}
-          <button id="auditLogsBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Audit Logs</button>
-          <button id="exportBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Export</button>
-          <button id="logoutBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]">Logout</button>
+    mobileMenuOpen = true;
+    document.body.style.overflow = "hidden";
+
+    const menu = el(`
+      <div class="fixed inset-0 z-50 md:hidden">
+        <div class="fixed inset-0 bg-black/60 animate-fadeIn" id="mobileMenuBackdrop"></div>
+        <div class="fixed right-0 top-0 h-full w-80 max-w-[85vw] bg-zinc-900 border-l border-zinc-800 shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300 ease-out" id="mobileMenuDrawer">
+          <div class="px-4 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+            <div class="font-semibold text-lg">Menu</div>
+            <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-200 text-xl transition-all duration-200" id="mobileMenuClose" aria-label="Close menu">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 space-y-2">
+            ${isAdmin ? '<button id="mobileIconLibraryBtn" class="w-full text-left px-4 py-3 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] font-medium transition-all duration-200 flex items-center gap-3" aria-label="Icon Library">' +
+              '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>' +
+              '<span>Icon Library</span></button>' : ''}
+            ${isAdmin ? '<button id="mobileCreateUserBtn" class="w-full text-left px-4 py-3 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] font-medium flex items-center gap-3" aria-label="Create User">' +
+              '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' +
+              '<span>Create User</span></button>' : ''}
+            <button id="mobileAuditLogsBtn" class="w-full text-left px-4 py-3 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] font-medium transition-all duration-200 flex items-center gap-3" aria-label="Audit Logs">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <span>Audit Logs</span>
+            </button>
+            <button id="mobileExportBtn" class="w-full text-left px-4 py-3 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] font-medium transition-all duration-200 flex items-center gap-3" aria-label="Export">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+              <span>Export</span>
+            </button>
+            <button id="mobileLogoutBtn" class="w-full text-left px-4 py-3 rounded-lg border border-red-800 hover:bg-red-950 min-h-[44px] font-medium transition-all duration-200 flex items-center gap-3 text-red-400" aria-label="Logout">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </div>
+    `);
+
+    document.body.appendChild(menu);
+    mobileMenuElement = menu;
+
+    // Animate in
+    setTimeout(() => {
+      const drawer = menu.querySelector("#mobileMenuDrawer");
+      if (drawer) {
+        drawer.classList.remove("translate-x-full");
+        drawer.classList.add("translate-x-0");
+      }
+    }, 10);
+
+    // Close handlers
+    menu.querySelector("#mobileMenuClose").onclick = closeMobileMenu;
+    menu.querySelector("#mobileMenuBackdrop").onclick = closeMobileMenu;
+
+    // Button handlers
+    if (buttonHandlers) {
+      const iconLibraryBtn = menu.querySelector("#mobileIconLibraryBtn");
+      if (iconLibraryBtn && buttonHandlers.iconLibrary) {
+        iconLibraryBtn.onclick = () => {
+          closeMobileMenu();
+          buttonHandlers.iconLibrary();
+        };
+      }
+
+      const createUserBtn = menu.querySelector("#mobileCreateUserBtn");
+      if (createUserBtn && buttonHandlers.createUser) {
+        createUserBtn.onclick = () => {
+          closeMobileMenu();
+          buttonHandlers.createUser();
+        };
+      }
+
+      const auditLogsBtn = menu.querySelector("#mobileAuditLogsBtn");
+      if (auditLogsBtn && buttonHandlers.auditLogs) {
+        auditLogsBtn.onclick = () => {
+          closeMobileMenu();
+          buttonHandlers.auditLogs();
+        };
+      }
+
+      const exportBtn = menu.querySelector("#mobileExportBtn");
+      if (exportBtn && buttonHandlers.export) {
+        exportBtn.onclick = () => {
+          closeMobileMenu();
+          buttonHandlers.export();
+        };
+      }
+
+      const logoutBtn = menu.querySelector("#mobileLogoutBtn");
+      if (logoutBtn && buttonHandlers.logout) {
+        logoutBtn.onclick = () => {
+          closeMobileMenu();
+          buttonHandlers.logout();
+        };
+      }
+    }
+
+    // ESC key handler
+    const escHandler = (e) => {
+      if (e.key === "Escape" && mobileMenuOpen) {
+        closeMobileMenu();
+        document.removeEventListener("keydown", escHandler);
+      }
+    };
+    document.addEventListener("keydown", escHandler);
+
+    return menu;
+  }
+
+  function topbar(buttonHandlers) {
+    const isAdmin = state.me && state.me.role === "admin";
+    return el(`
+      <nav class="sticky top-0 z-10 bg-zinc-950/80 backdrop-blur border-b border-zinc-800" style="padding-top: env(safe-area-inset-top, 0);" role="navigation" aria-label="Main navigation">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+          <a href="#/" id="logoLink" class="cursor-pointer" aria-label="Home"><img src="/logo.png" alt="Mini-IPAM" class="h-6"></a>
+          <div class="flex-1"></div>
+          <!-- Desktop buttons - hidden on mobile -->
+          <div class="hidden md:flex items-center gap-3">
+            ${isAdmin ? '<button id="iconLibraryBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]" aria-label="Icon Library">Icon Library</button>' : ''}
+            ${isAdmin ? '<button id="createUserBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium flex items-center gap-2 transition-all duration-200" aria-label="Create User">' + 
+              '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>' +
+              '<span>Create User</span></button>' : ''}
+            <button id="auditLogsBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]" aria-label="Audit Logs">Audit Logs</button>
+            <button id="exportBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]" aria-label="Export">Export</button>
+            <button id="logoutBtn" class="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md border border-zinc-800 hover:bg-zinc-900 min-h-[44px] font-medium transition-all duration-200 hover:scale-[1.02]" aria-label="Logout">Logout</button>
+          </div>
+          <!-- Mobile hamburger menu - visible only on mobile -->
+          <button id="mobileMenuBtn" class="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md border border-zinc-800 hover:bg-zinc-900 transition-all duration-200" aria-label="Open menu" aria-expanded="false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+          </button>
+        </div>
+      </nav>
     `);
   }
   
@@ -553,11 +747,11 @@ const state = {
           <div class="mt-5 space-y-3">
             <div>
               <label class="text-xs text-zinc-400">Username</label>
-              <input id="u" placeholder="Enter your username" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 placeholder:text-zinc-600" />
+              <input id="u" placeholder="Enter your username" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 placeholder:text-zinc-600" autocomplete="username" inputmode="text" />
             </div>
             <div>
               <label class="text-xs text-zinc-400">Password</label>
-              <input id="p" type="password" placeholder="Enter your password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 placeholder:text-zinc-600" />
+              <input id="p" type="password" placeholder="Enter your password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 placeholder:text-zinc-600" autocomplete="current-password" />
             </div>
             <button id="loginBtn" class="w-full mt-2 bg-white text-zinc-900 rounded-lg px-3 py-2.5 font-medium hover:opacity-90 min-h-[44px]">
               Login
@@ -620,38 +814,78 @@ const state = {
   function renderVlanList() {
     const root = appRoot();
     root.innerHTML = "";
-    const tb = topbar();
+    
+    const buttonHandlers = {
+      logout: async () => {
+        try {
+          await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+          state.me = null;
+          toast("Logged out", { type: "success" });
+          route();
+        } catch (e) {
+          toast(e.message, { type: "error" });
+        }
+      },
+      export: () => {
+        window.location.href = "/api/export/data";
+      },
+      iconLibrary: () => openIconLibraryModal(),
+      createUser: () => openCreateUserModal(),
+      auditLogs: () => setRoute("#/audit-logs")
+    };
+
+    const tb = topbar(buttonHandlers);
     root.appendChild(tb);
   
-    tb.querySelector("#logoutBtn").onclick = async () => {
-      const btn = tb.querySelector("#logoutBtn");
-      setButtonLoading(btn, true, "Logout");
-      try {
-        await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
-        state.me = null;
-        toast("Logged out", { type: "success" });
-        route();
-      } catch (e) {
-        toast(e.message, { type: "error" });
-      } finally {
+    // Desktop button handlers
+    const logoutBtn = tb.querySelector("#logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.onclick = async () => {
+        const btn = logoutBtn;
+        setButtonLoading(btn, true, "Logout");
+        await buttonHandlers.logout();
         setButtonLoading(btn, false);
-      }
-    };
-    tb.querySelector("#exportBtn").onclick = () => {
-      window.location.href = "/api/export/data";
-    };
+      };
+    }
+    const exportBtn = tb.querySelector("#exportBtn");
+    if (exportBtn) {
+      exportBtn.onclick = buttonHandlers.export;
+    }
     const iconLibraryBtn = tb.querySelector("#iconLibraryBtn");
     if (iconLibraryBtn) {
-      iconLibraryBtn.onclick = () => openIconLibraryModal();
+      iconLibraryBtn.onclick = buttonHandlers.iconLibrary;
     }
     const createUserBtn = tb.querySelector("#createUserBtn");
     if (createUserBtn) {
-      createUserBtn.onclick = () => openCreateUserModal();
+      createUserBtn.onclick = buttonHandlers.createUser;
     }
     const auditLogsBtn = tb.querySelector("#auditLogsBtn");
     if (auditLogsBtn) {
-      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+      auditLogsBtn.onclick = buttonHandlers.auditLogs;
     }
+    
+    // Mobile menu button
+    const mobileMenuBtn = tb.querySelector("#mobileMenuBtn");
+    if (mobileMenuBtn) {
+      mobileMenuBtn.onclick = () => {
+        const handlers = {
+          ...buttonHandlers,
+          logout: async () => {
+            try {
+              await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+              state.me = null;
+              toast("Logged out", { type: "success" });
+              route();
+            } catch (e) {
+              toast(e.message, { type: "error" });
+            }
+          }
+        };
+        openMobileMenu(handlers);
+        mobileMenuBtn.setAttribute("aria-expanded", "true");
+      };
+    }
+    
     const logoLink = tb.querySelector("#logoLink");
     if (logoLink) {
       logoLink.onclick = (e) => {
@@ -734,46 +968,156 @@ const state = {
               <div><span class="text-zinc-200">${v.derived.reserved}</span> reserved</div>
             </div>
           </button>
-          <button class="absolute bottom-3 right-3 px-4 py-2.5 text-sm bg-white text-zinc-900 rounded-lg font-medium hover:opacity-90 transition-all duration-200 hover:scale-[1.02] min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5" data-add-btn>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-            </svg>
-            <span class="hidden sm:inline">Add</span>
-          </button>
         </div>
       `);
       card.querySelector("[data-card-btn]").onclick = () => setRoute(`#/vlan/${v.id}`);
-      card.querySelector("[data-add-btn]").onclick = async (e) => {
-        e.stopPropagation();
-        const btn = e.target.closest("[data-add-btn]");
-        setButtonLoading(btn, true, "+Add");
-        try {
-          const fullVlan = await api(`/api/vlans/${v.id}`, { loadingKey: `vlan-${v.id}` });
-          openAssignmentModal(fullVlan);
-        } catch (e) {
-          toast(e.message, { type: "error" });
-        } finally {
-          setButtonLoading(btn, false);
-        }
-      };
       container.appendChild(card);
     }
   }
   
+  // Focus trap utility
+  function trapFocus(container) {
+    const focusableElements = container.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    function handleTabKey(e) {
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    }
+
+    container.addEventListener('keydown', handleTabKey);
+    
+    // Focus first element
+    if (firstElement) {
+      setTimeout(() => firstElement.focus(), 100);
+    }
+
+    return () => {
+      container.removeEventListener('keydown', handleTabKey);
+    };
+  }
+
   function modalShell(title, innerHtml) {
     const m = el(`
       <div class="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 animate-fadeIn">
-        <div class="w-full h-full sm:h-auto sm:max-w-xl bg-zinc-900 border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scaleIn">
+        <div class="w-full h-full sm:h-auto sm:max-w-xl bg-zinc-900 border-0 sm:border border-zinc-800 rounded-none sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scaleIn" role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div class="px-4 sm:px-5 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
-            <div class="font-semibold text-lg">${escapeHtml(title)}</div>
-            <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-200 text-xl transition-all duration-200 hover:scale-110 hover:rotate-90" id="close">✕</button>
+            <div class="font-semibold text-lg" id="modal-title">${escapeHtml(title)}</div>
+            <button class="min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-200 text-xl transition-all duration-200 hover:scale-110 hover:rotate-90" id="close" aria-label="Close">✕</button>
           </div>
           <div class="flex-1 overflow-y-auto p-4 sm:p-5">${innerHtml}</div>
         </div>
       </div>
     `);
-    m.querySelector("#close").onclick = () => m.remove();
-    m.onclick = (e) => { if (e.target === m) m.remove(); };
+    
+    const modalContent = m.querySelector('[role="dialog"]');
+    const closeModal = () => {
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      m.remove();
+    };
+    
+    // Prevent body scroll
+    document.body.classList.add('modal-open');
+    document.body.style.overflow = 'hidden';
+    
+    // ESC key handler
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+    
+    // Focus trap
+    const removeFocusTrap = trapFocus(modalContent);
+    
+    // Swipe-down-to-close on mobile
+    let touchStartY = 0;
+    let touchStartTime = 0;
+    let isSwiping = false;
+    const isMobile = window.innerWidth < 640;
+    
+    if (isMobile) {
+      modalContent.addEventListener('touchstart', (e) => {
+        // Only allow swipe from top of modal
+        if (e.touches[0].clientY < 100) {
+          touchStartY = e.touches[0].clientY;
+          touchStartTime = Date.now();
+          isSwiping = false;
+        }
+      }, { passive: true });
+      
+      modalContent.addEventListener('touchmove', (e) => {
+        if (!touchStartY) return;
+        const touchY = e.touches[0].clientY;
+        const deltaY = touchY - touchStartY;
+        
+        // Only swipe down
+        if (deltaY > 10) {
+          isSwiping = true;
+          modalContent.style.transform = `translateY(${deltaY}px)`;
+          modalContent.style.opacity = `${1 - deltaY / 300}`;
+        }
+      }, { passive: true });
+      
+      modalContent.addEventListener('touchend', (e) => {
+        if (!touchStartY || !isSwiping) {
+          touchStartY = 0;
+          return;
+        }
+        
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaY = touchEndY - touchStartY;
+        const deltaTime = Date.now() - touchStartTime;
+        const velocity = deltaY / deltaTime;
+        
+        // Close if swiped down more than 100px or with sufficient velocity
+        if (deltaY > 100 || velocity > 0.5) {
+          closeModal();
+        } else {
+          // Snap back
+          modalContent.style.transform = '';
+          modalContent.style.opacity = '';
+        }
+        
+        touchStartY = 0;
+        isSwiping = false;
+      }, { passive: true });
+    }
+    
+    m.querySelector("#close").onclick = closeModal;
+    m.onclick = (e) => { 
+      if (e.target === m || e.target.classList.contains('bg-black/60')) {
+        closeModal();
+      }
+    };
+    
+    // Cleanup on remove
+    const originalRemove = m.remove;
+    m.remove = function() {
+      removeFocusTrap();
+      document.removeEventListener('keydown', escHandler);
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      originalRemove.call(this);
+    };
+    
     document.body.appendChild(m);
     return m;
   }
@@ -789,11 +1133,11 @@ const state = {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="text-xs text-zinc-400">VLAN ID (optional)</label>
-            <input id="vid" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+            <input id="vid" type="number" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" inputmode="numeric" />
           </div>
           <div>
             <label class="text-xs text-zinc-400">Subnet CIDR</label>
-            <input id="cidr" placeholder="192.168.10.0/24" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 mono" />
+            <input id="cidr" placeholder="192.168.10.0/24" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 mono" inputmode="text" autocomplete="off" />
           </div>
         </div>
         <div class="flex flex-col sm:flex-row justify-end gap-2 pt-2">
@@ -862,35 +1206,76 @@ const state = {
   async function renderVlanDetail(vlanId) {
     const root = appRoot();
     root.innerHTML = "";
-    const tb = topbar();
+    
+    const buttonHandlers = {
+      logout: async () => {
+        try {
+          await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+          state.me = null;
+          route();
+        } catch (e) {
+          toast(e.message, { type: "error" });
+        }
+      },
+      export: () => {
+        window.location.href = "/api/export/data";
+      },
+      iconLibrary: () => openIconLibraryModal(),
+      createUser: () => openCreateUserModal(),
+      auditLogs: () => setRoute("#/audit-logs")
+    };
+
+    const tb = topbar(buttonHandlers);
     root.appendChild(tb);
   
-    tb.querySelector("#logoutBtn").onclick = async () => {
-      const btn = tb.querySelector("#logoutBtn");
-      setButtonLoading(btn, true, "Logout");
-      try {
-        await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
-        state.me = null;
-        route();
-      } catch (e) {
-        toast(e.message, { type: "error" });
-      } finally {
+    // Desktop button handlers
+    const logoutBtn = tb.querySelector("#logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.onclick = async () => {
+        const btn = logoutBtn;
+        setButtonLoading(btn, true, "Logout");
+        await buttonHandlers.logout();
         setButtonLoading(btn, false);
-      }
-    };
-    tb.querySelector("#exportBtn").onclick = () => window.location.href = "/api/export/data";
+      };
+    }
+    const exportBtn = tb.querySelector("#exportBtn");
+    if (exportBtn) {
+      exportBtn.onclick = buttonHandlers.export;
+    }
     const iconLibraryBtn = tb.querySelector("#iconLibraryBtn");
     if (iconLibraryBtn) {
-      iconLibraryBtn.onclick = () => openIconLibraryModal();
+      iconLibraryBtn.onclick = buttonHandlers.iconLibrary;
     }
     const createUserBtn = tb.querySelector("#createUserBtn");
     if (createUserBtn) {
-      createUserBtn.onclick = () => openCreateUserModal();
+      createUserBtn.onclick = buttonHandlers.createUser;
     }
     const auditLogsBtn = tb.querySelector("#auditLogsBtn");
     if (auditLogsBtn) {
-      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+      auditLogsBtn.onclick = buttonHandlers.auditLogs;
     }
+    
+    // Mobile menu button
+    const mobileMenuBtn = tb.querySelector("#mobileMenuBtn");
+    if (mobileMenuBtn) {
+      mobileMenuBtn.onclick = () => {
+        const handlers = {
+          ...buttonHandlers,
+          logout: async () => {
+            try {
+              await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+              state.me = null;
+              route();
+            } catch (e) {
+              toast(e.message, { type: "error" });
+            }
+          }
+        };
+        openMobileMenu(handlers);
+        mobileMenuBtn.setAttribute("aria-expanded", "true");
+      };
+    }
+    
     const logoLink = tb.querySelector("#logoLink");
     if (logoLink) {
       logoLink.onclick = (e) => {
@@ -912,7 +1297,7 @@ const state = {
 
         <div class="mt-6 space-y-3">
           <div class="flex flex-col sm:flex-row gap-3">
-            <input id="search" placeholder="Search IP / hostname / tag / notes..." class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2.5 outline-none focus:border-zinc-600 min-h-[44px]" />
+            <input id="search" placeholder="Search IP / hostname / tag / notes..." class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2.5 outline-none focus:border-zinc-600 min-h-[44px]" inputmode="search" autocomplete="off" />
             <select id="typeFilter" class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2.5 outline-none focus:border-zinc-600 min-h-[44px]">
               <option value="all">All types</option>
             </select>
@@ -956,8 +1341,8 @@ const state = {
           </div>
         </div>
 
-        <div id="tableContainer" class="mt-4 overflow-hidden rounded-2xl border border-zinc-800 hidden md:block">
-          <table class="w-full text-sm">
+        <div id="tableContainer" class="mt-4 overflow-x-auto rounded-2xl border border-zinc-800 hidden md:block" style="scrollbar-width: thin; scrollbar-color: rgb(63 63 70) transparent;">
+          <table class="w-full text-sm min-w-[800px]">
             <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-300">
               <tr>
                 <th class="text-left p-3 w-12">Icon</th>
@@ -1059,24 +1444,26 @@ const state = {
       }
     };
 
-    // Export button handler
-    const exportBtn = wrap.querySelector("#exportBtn");
+    // Export button handler (detail view)
+    const detailExportBtn = wrap.querySelector("#exportBtn");
     const exportMenu = wrap.querySelector("#exportMenu");
     let exportMenuOpen = false;
     
-    exportBtn.onclick = (e) => {
-      e.stopPropagation();
-      exportMenuOpen = !exportMenuOpen;
-      exportMenu.classList.toggle("hidden", !exportMenuOpen);
-    };
-    
-    // Close export menu when clicking outside
-    document.addEventListener("click", (e) => {
-      if (!exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
-        exportMenuOpen = false;
-        exportMenu.classList.add("hidden");
-      }
-    });
+    if (detailExportBtn) {
+      detailExportBtn.onclick = (e) => {
+        e.stopPropagation();
+        exportMenuOpen = !exportMenuOpen;
+        exportMenu.classList.toggle("hidden", !exportMenuOpen);
+      };
+      
+      // Close export menu when clicking outside
+      document.addEventListener("click", (e) => {
+        if (!detailExportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+          exportMenuOpen = false;
+          exportMenu.classList.add("hidden");
+        }
+      });
+    }
     
     // Export format handlers
     wrap.querySelectorAll(".exportFormatBtn").forEach(btn => {
@@ -1419,6 +1806,7 @@ const state = {
         img.className = "w-8 h-8 rounded-md border border-zinc-800 object-cover object-center";
         // Escape mime_type to prevent XSS in data URI
         const safeMimeType = escapeHtml(a.icon.mime_type || "image/png");
+        img.loading = "lazy";
         img.src = `data:${safeMimeType};base64,${a.icon.data_base64}`;
         iconTd.appendChild(img);
       } else {
@@ -1440,13 +1828,13 @@ const state = {
           <td class="p-3 text-zinc-300">${escapeHtml((a.notes || "").slice(0, 80))}</td>
           <td class="p-3 text-right">
             <div class="flex flex-row gap-2 items-center justify-end">
-              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-edit title="Edit">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-edit title="Edit" aria-label="Edit assignment">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                 </svg>
               </button>
-              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-del title="Delete">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <button class="min-w-[44px] min-h-[44px] px-3 py-2 rounded-md border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center transition-all duration-200 hover:scale-[1.05]" data-del title="Delete" aria-label="Delete assignment">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                 </svg>
               </button>
@@ -1535,7 +1923,7 @@ const state = {
         <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-3 transition-all duration-200 hover:border-zinc-700 animate-fadeIn">
           <div class="flex items-start gap-3">
             ${a.icon?.data_base64 ? 
-              `<img src="data:${escapeHtml(a.icon.mime_type || "image/png")};base64,${a.icon.data_base64}" class="w-12 h-12 rounded-md border border-zinc-800 object-cover object-center flex-shrink-0" />` :
+              `<img src="data:${escapeHtml(a.icon.mime_type || "image/png")};base64,${a.icon.data_base64}" class="w-12 h-12 rounded-md border border-zinc-800 object-cover object-center flex-shrink-0" loading="lazy" />` :
               `<div class="w-12 h-12 rounded-md border border-zinc-800 bg-zinc-950 flex-shrink-0"></div>`
             }
             <div class="flex-1 min-w-0">
@@ -1560,14 +1948,14 @@ const state = {
           ` : ''}
           
           <div class="flex gap-2 pt-2 border-t border-zinc-800">
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 hover:scale-[1.02]" data-edit>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 hover:scale-[1.02]" data-edit aria-label="Edit assignment">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
               </svg>
               Edit
             </button>
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium text-red-400 transition-all duration-200 hover:scale-[1.02]" data-del>
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium text-red-400 transition-all duration-200 hover:scale-[1.02]" data-del aria-label="Delete assignment">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
               </svg>
               Delete
@@ -1647,12 +2035,12 @@ const state = {
       <div class="space-y-3">
         <div>
           <label class="text-xs text-zinc-400">Username</label>
-          <input id="username" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="username" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="username" inputmode="text" />
           <div class="text-xs text-zinc-500 mt-1">Must be at least 3 characters</div>
         </div>
         <div>
           <label class="text-xs text-zinc-400">Password</label>
-          <input id="password" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
+          <input id="password" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" autocomplete="new-password" />
           <div class="text-xs text-zinc-500 mt-1">Must be at least 8 characters</div>
         </div>
         <div>
@@ -1726,7 +2114,7 @@ const state = {
         <div class="border-t border-zinc-800 pt-4">
           <div class="flex items-center justify-between mb-3">
             <label class="text-xs text-zinc-400">Icon Library</label>
-            <input id="librarySearch" type="text" placeholder="Search icons..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-zinc-600 w-48" />
+            <input id="librarySearch" type="text" placeholder="Search icons..." class="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-zinc-600 w-48" inputmode="search" autocomplete="off" />
           </div>
           <div id="iconLibraryGrid" class="grid grid-cols-4 sm:grid-cols-6 gap-3 max-h-96 overflow-y-auto p-2 bg-zinc-950 border border-zinc-800 rounded-lg">
             <!-- Icons will be loaded here -->
@@ -1759,7 +2147,7 @@ const state = {
         const card = el(`
           <div class="relative group">
             <div class="aspect-square p-2 border border-zinc-800 rounded-lg bg-zinc-900 hover:border-zinc-600 transition">
-              <img src="/icons/${escapeHtml(iconInfo.filename)}" class="w-full h-full object-contain" />
+              <img src="/icons/${escapeHtml(iconInfo.filename)}" class="w-full h-full object-contain" loading="lazy" />
             </div>
             <div class="mt-1 text-xs text-zinc-400 truncate" title="${escapeHtml(iconInfo.name)}">${escapeHtml(iconInfo.name)}</div>
             <button class="absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" data-delete-icon="${escapeHtml(iconInfo.filename)}" title="Delete">
@@ -1858,8 +2246,8 @@ const state = {
           <div>
             <label class="text-xs text-zinc-400">IP</label>
             <div class="mt-1 flex gap-2">
-              <input id="ip" placeholder="${vlan.derived ? `${escapeHtml(vlan.derived.usable_start)} - ${escapeHtml(vlan.derived.usable_end)}` : ''}" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 mono" />
-              <button id="generateIpBtn" class="min-w-[44px] min-h-[44px] px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 text-sm whitespace-nowrap" title="Generate random available IP">🎲</button>
+              <input id="ip" placeholder="${vlan.derived ? `${escapeHtml(vlan.derived.usable_start)} - ${escapeHtml(vlan.derived.usable_end)}` : ''}" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 mono" inputmode="numeric" autocomplete="off" />
+              <button id="generateIpBtn" class="min-w-[44px] min-h-[44px] px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 text-sm whitespace-nowrap" title="Generate random available IP" aria-label="Generate random available IP">🎲</button>
             </div>
             <div class="text-xs text-zinc-500 mt-1">Must be inside ${escapeHtml(vlan.subnet_cidr)} and not reserved.</div>
           </div>
@@ -1889,7 +2277,7 @@ const state = {
           <label class="text-xs text-zinc-400">Icon (optional)</label>
           <div class="mt-2 space-y-3">
             <div class="relative">
-              <input id="iconSearch" type="text" placeholder="Search icons..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-zinc-600" />
+              <input id="iconSearch" type="text" placeholder="Search icons..." class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm outline-none focus:border-zinc-600" inputmode="search" autocomplete="off" />
               <svg class="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
               </svg>
@@ -1901,7 +2289,7 @@ const state = {
               <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 max-w-sm w-full">
                 <div class="flex items-center justify-between mb-3">
                   <div class="text-sm font-medium" id="previewIconName"></div>
-                  <button id="closePreview" class="text-zinc-400 hover:text-zinc-200">✕</button>
+                  <button id="closePreview" class="text-zinc-400 hover:text-zinc-200" aria-label="Close preview">✕</button>
                 </div>
                 <div class="flex justify-center mb-3">
                   <img id="previewIconImg" class="w-32 h-32 object-contain rounded-lg border border-zinc-800" />
@@ -2008,6 +2396,7 @@ const state = {
       img.className = "w-12 h-12 object-cover object-center";
       // Escape mime_type to prevent XSS in data URI
       const safeMimeType = escapeHtml(obj.mime_type || "image/png");
+      img.loading = "lazy";
       img.src = `data:${safeMimeType};base64,${obj.data_base64}`;
       preview.appendChild(img);
       previewText.textContent = "Icon set";
@@ -2370,35 +2759,76 @@ const state = {
   async function renderAuditLogs() {
     const root = appRoot();
     root.innerHTML = "";
-    const tb = topbar();
+    
+    const buttonHandlers = {
+      logout: async () => {
+        try {
+          await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+          state.me = null;
+          toast("Logged out", { type: "success" });
+          route();
+        } catch (e) {
+          toast(e.message, { type: "error" });
+        }
+      },
+      export: () => {
+        window.location.href = "/api/export/data";
+      },
+      iconLibrary: () => openIconLibraryModal(),
+      createUser: () => openCreateUserModal(),
+      auditLogs: () => setRoute("#/audit-logs")
+    };
+
+    const tb = topbar(buttonHandlers);
     root.appendChild(tb);
 
-    tb.querySelector("#logoutBtn").onclick = async () => {
-      const btn = tb.querySelector("#logoutBtn");
-      setButtonLoading(btn, true, "Logout");
-      try {
-        await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
-        state.me = null;
-        toast("Logged out", { type: "success" });
-        route();
-      } catch (e) {
-        toast(e.message, { type: "error" });
-      } finally {
+    // Desktop button handlers
+    const logoutBtn = tb.querySelector("#logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.onclick = async () => {
+        const btn = logoutBtn;
+        setButtonLoading(btn, true, "Logout");
+        await buttonHandlers.logout();
         setButtonLoading(btn, false);
-      }
-    };
-    tb.querySelector("#exportBtn").onclick = () => window.location.href = "/api/export/data";
+      };
+    }
+    const exportBtn = tb.querySelector("#exportBtn");
+    if (exportBtn) {
+      exportBtn.onclick = buttonHandlers.export;
+    }
     const iconLibraryBtn = tb.querySelector("#iconLibraryBtn");
     if (iconLibraryBtn) {
-      iconLibraryBtn.onclick = () => openIconLibraryModal();
+      iconLibraryBtn.onclick = buttonHandlers.iconLibrary;
     }
     const createUserBtn = tb.querySelector("#createUserBtn");
     if (createUserBtn) {
-      createUserBtn.onclick = () => openCreateUserModal();
+      createUserBtn.onclick = buttonHandlers.createUser;
     }
     const auditLogsBtn = tb.querySelector("#auditLogsBtn");
     if (auditLogsBtn) {
-      auditLogsBtn.onclick = () => setRoute("#/audit-logs");
+      auditLogsBtn.onclick = buttonHandlers.auditLogs;
+    }
+    
+    // Mobile menu button
+    const mobileMenuBtn = tb.querySelector("#mobileMenuBtn");
+    if (mobileMenuBtn) {
+      mobileMenuBtn.onclick = () => {
+        const handlers = {
+          ...buttonHandlers,
+          logout: async () => {
+            try {
+              await api("/api/auth/logout", { method:"POST", loadingKey: "logout" });
+              state.me = null;
+              toast("Logged out", { type: "success" });
+              route();
+            } catch (e) {
+              toast(e.message, { type: "error" });
+            }
+          }
+        };
+        openMobileMenu(handlers);
+        mobileMenuBtn.setAttribute("aria-expanded", "true");
+      };
     }
 
     const content = el(`
