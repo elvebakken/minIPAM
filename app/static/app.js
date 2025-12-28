@@ -1005,9 +1005,32 @@ const state = {
       renderRows(wrap.querySelector("#rows"), vlan);
     };
   
-    wrap.querySelector("#addBtn").onclick = () => openAssignmentModal(vlan);
+    const addBtn = wrap.querySelector("#addBtn");
     const nextBtn = wrap.querySelector("#nextBtn");
+    const totalUsable = vlan.derived?.total_usable ?? 0;
+    
+    // Disable assignment buttons if no usable hosts
+    if (totalUsable === 0) {
+      addBtn.disabled = true;
+      addBtn.classList.add("opacity-50", "cursor-not-allowed");
+      addBtn.title = "No usable hosts in this subnet";
+      nextBtn.disabled = true;
+      nextBtn.classList.add("opacity-50", "cursor-not-allowed");
+      nextBtn.title = "No usable hosts in this subnet";
+    }
+    
+    addBtn.onclick = () => {
+      if (totalUsable === 0) {
+        toast("No usable hosts in this subnet (/31 and /32 subnets cannot have assignments)", { type: "error" });
+        return;
+      }
+      openAssignmentModal(vlan);
+    };
     nextBtn.onclick = async () => {
+      if (totalUsable === 0) {
+        toast("No usable hosts in this subnet (/31 and /32 subnets cannot have assignments)", { type: "error" });
+        return;
+      }
       setButtonLoading(nextBtn, true, "Next available");
       try {
         const res = await api(`/api/vlans/${vlan.id}/next-available`, { loadingKey: `next-ip-${vlan.id}` });
@@ -1237,21 +1260,30 @@ const state = {
     const usableDiv = document.createElement("div");
     usableDiv.className = "text-xs text-zinc-500 mt-1";
     
-    usableDiv.appendChild(document.createTextNode("Usable: "));
-    
-    const usableStartSpan = document.createElement("span");
-    usableStartSpan.className = "mono";
-    usableStartSpan.textContent = d.usable_start;
-    usableDiv.appendChild(usableStartSpan);
-    
-    usableDiv.appendChild(document.createTextNode(" → "));
-    
-    const usableEndSpan = document.createElement("span");
-    usableEndSpan.className = "mono";
-    usableEndSpan.textContent = d.usable_end;
-    usableDiv.appendChild(usableEndSpan);
-    
-    usableDiv.appendChild(document.createTextNode(` (${total})`));
+    if (total === 0) {
+      usableDiv.appendChild(document.createTextNode("No usable hosts ("));
+      const cidrSpan = document.createElement("span");
+      cidrSpan.className = "mono text-orange-400";
+      cidrSpan.textContent = "/31 or /32 subnet";
+      usableDiv.appendChild(cidrSpan);
+      usableDiv.appendChild(document.createTextNode(")"));
+    } else {
+      usableDiv.appendChild(document.createTextNode("Usable: "));
+      
+      const usableStartSpan = document.createElement("span");
+      usableStartSpan.className = "mono";
+      usableStartSpan.textContent = d.usable_start;
+      usableDiv.appendChild(usableStartSpan);
+      
+      usableDiv.appendChild(document.createTextNode(" → "));
+      
+      const usableEndSpan = document.createElement("span");
+      usableEndSpan.className = "mono";
+      usableEndSpan.textContent = d.usable_end;
+      usableDiv.appendChild(usableEndSpan);
+      
+      usableDiv.appendChild(document.createTextNode(` (${total})`));
+    }
     leftDiv.appendChild(usableDiv);
     
     wrapper.appendChild(leftDiv);
@@ -1799,6 +1831,13 @@ const state = {
   }
 
   function openAssignmentModal(vlan, existing=null, opts={}) {
+    // Prevent opening assignment modal if no usable hosts
+    const totalUsable = vlan.derived?.total_usable ?? 0;
+    if (!existing && totalUsable === 0) {
+      toast("No usable hosts in this subnet (/31 and /32 subnets cannot have assignments)", { type: "error" });
+      return;
+    }
+    
     const isEdit = !!existing;
     const m = modalShell(isEdit ? "Edit assignment" : "Add assignment", `
       <div class="space-y-3">

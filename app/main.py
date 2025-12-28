@@ -337,6 +337,10 @@ def create_vlan(payload: CreateVlanRequest, user=Depends(require_csrf_and_role({
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CIDR: {e}")
 
+    # Forbid /31 and /32 subnets as they have no usable hosts
+    if net.prefixlen >= 31:
+        raise HTTPException(status_code=400, detail=f"Subnet /{net.prefixlen} has no usable hosts. /31 and /32 subnets are not supported for VLAN creation.")
+
     now = utcnow_iso()
     v = Vlan(
         id=ulid_like("vlan"),
@@ -389,6 +393,9 @@ def patch_vlan(vlan_id: str, payload: PatchVlanRequest, user=Depends(require_csr
             net = parse_network(payload.subnet_cidr)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid CIDR: {e}")
+        # Forbid /31 and /32 subnets as they have no usable hosts
+        if net.prefixlen >= 31:
+            raise HTTPException(status_code=400, detail=f"Subnet /{net.prefixlen} has no usable hosts. /31 and /32 subnets are not supported for VLAN creation.")
         v.subnet_cidr = str(net)
         # optional: reset gateway suggestion if not set
         if not v.gateway_ip and data.settings.gateway_default == "first_usable":
@@ -437,6 +444,18 @@ def normalize_and_validate_assignment(v: Vlan, data_settings: dict, ip: str, ass
     # cidr-aware check
     if not ip_in_subnet(ip, v.subnet_cidr):
         raise HTTPException(status_code=400, detail="IP is outside VLAN subnet")
+
+    # Block network and broadcast addresses via CIDR logic (not string matching)
+    nb_check = is_network_or_broadcast(ip, v.subnet_cidr)
+    if nb_check["is_network"]:
+        raise HTTPException(status_code=400, detail="IP is the network address for this subnet")
+    if nb_check["is_broadcast"]:
+        raise HTTPException(status_code=400, detail="IP is the broadcast address for this subnet")
+
+    # Check if subnet has usable hosts (for /31 and /32)
+    net = parse_network(v.subnet_cidr)
+    if net.prefixlen >= 31:
+        raise HTTPException(status_code=400, detail="Subnet has no usable hosts (/31 and /32 subnets cannot have assignments)")
 
     # prevent duplicates (excluding self on patch)
     for a in v.assignments:
@@ -900,6 +919,21 @@ def import_assignments(
                 # Validate IP is in subnet
                 if not ip_in_subnet(ip, v.subnet_cidr):
                     errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is outside VLAN subnet {v.subnet_cidr}"})
+                    continue
+                
+                # Block network and broadcast addresses via CIDR logic
+                nb_check = is_network_or_broadcast(ip, v.subnet_cidr)
+                if nb_check["is_network"]:
+                    errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is the network address for this subnet"})
+                    continue
+                if nb_check["is_broadcast"]:
+                    errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is the broadcast address for this subnet"})
+                    continue
+                
+                # Check if subnet has usable hosts (for /31 and /32)
+                net = parse_network(v.subnet_cidr)
+                if net.prefixlen >= 31:
+                    errors.append({"row": idx, "ip": ip, "error": f"Subnet has no usable hosts (/31 and /32 subnets cannot have assignments)"})
                     continue
                 
                 # Check for duplicates
