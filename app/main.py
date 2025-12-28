@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import os
 import base64
-from io import BytesIO
+import csv
+import json
+from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Response, Request
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Response, Request, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from PIL import Image
 
@@ -696,6 +698,271 @@ def export_data(user=Depends(require_role({"admin", "readwrite", "readonly"}))):
     if not path.exists():
         raise HTTPException(status_code=404, detail="data.json missing")
     return FileResponse(str(path), media_type="application/json", filename="data.json")
+
+
+@app.get("/api/vlans/{vlan_id}/assignments/export")
+def export_assignments(
+    vlan_id: str,
+    format: str = Query("csv", regex="^(csv|json|excel)$"),
+    search: Optional[str] = None,
+    type_filter: Optional[str] = None,
+    user=Depends(require_user)
+):
+    """Export assignments from a VLAN in CSV, JSON, or Excel format with optional filtering."""
+    data = load_data(DATA_DIR)
+    v = next((x for x in data.vlans if x.id == vlan_id), None)
+    if not v:
+        raise HTTPException(status_code=404, detail="VLAN not found")
+    
+    # Filter assignments
+    assignments = [a for a in v.assignments if not a.archived]
+    
+    # Apply search filter
+    if search:
+        search_lower = search.lower()
+        assignments = [
+            a for a in assignments
+            if search_lower in a.ip.lower() or
+               search_lower in (a.hostname or "").lower() or
+               search_lower in a.type.lower() or
+               search_lower in (a.notes or "").lower() or
+               any(search_lower in tag.lower() for tag in (a.tags or []))
+        ]
+    
+    # Apply type filter
+    if type_filter and type_filter != "all":
+        assignments = [a for a in assignments if a.type == type_filter]
+    
+    # Sort by IP
+    assignments.sort(key=lambda x: x.ip)
+    
+    # Prepare data with VLAN context
+    export_data = []
+    for a in assignments:
+        export_data.append({
+            "vlan_name": v.name,
+            "vlan_id": v.vlan_id,
+            "subnet_cidr": v.subnet_cidr,
+            "ip": a.ip,
+            "hostname": a.hostname,
+            "type": a.type,
+            "tags": ", ".join(a.tags) if a.tags else "",
+            "notes": a.notes,
+            "created_at": a.created_at,
+            "updated_at": a.updated_at,
+        })
+    
+    if format == "json":
+        json_str = json.dumps(export_data, indent=2)
+        return Response(
+            content=json_str,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="assignments_{v.name}_{vlan_id}.json"'}
+        )
+    
+    elif format == "csv":
+        output = StringIO()
+        if export_data:
+            writer = csv.DictWriter(output, fieldnames=export_data[0].keys())
+            writer.writeheader()
+            writer.writerows(export_data)
+        
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="assignments_{v.name}_{vlan_id}.csv"'}
+        )
+    
+    elif format == "excel":
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Assignments"
+            
+            # Headers
+            if export_data:
+                headers = list(export_data[0].keys())
+                ws.append(headers)
+                
+                # Style header row
+                header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                header_font = Font(bold=True, color="FFFFFF")
+                for cell in ws[1]:
+                    cell.fill = header_fill
+                    cell.font = header_font
+                
+                # Add data rows
+                for row_data in export_data:
+                    ws.append([row_data.get(h, "") for h in headers])
+                
+                # Auto-adjust column widths
+                for column in ws.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 50)
+                    ws.column_dimensions[column_letter].width = adjusted_width
+            
+            # Save to BytesIO
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            return Response(
+                content=output.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="assignments_{v.name}_{vlan_id}.xlsx"'}
+            )
+        except ImportError:
+            raise HTTPException(status_code=500, detail="Excel export requires openpyxl library")
+
+
+@app.post("/api/vlans/{vlan_id}/assignments/import")
+def import_assignments(
+    vlan_id: str,
+    file: UploadFile = File(...),
+    user=Depends(require_csrf_and_role({"admin", "readwrite"}))
+):
+    """Import assignments from CSV, JSON, or Excel file."""
+    data = load_data(DATA_DIR)
+    v = next((x for x in data.vlans if x.id == vlan_id), None)
+    if not v:
+        raise HTTPException(status_code=404, detail="VLAN not found")
+    
+    file_content = file.file.read()
+    filename = file.filename or ""
+    
+    imported = []
+    errors = []
+    
+    try:
+        # Determine file type
+        if filename.endswith('.json') or file.content_type == 'application/json':
+            # JSON import
+            try:
+                json_data = json.loads(file_content.decode('utf-8'))
+                if isinstance(json_data, list):
+                    rows = json_data
+                else:
+                    rows = [json_data]
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}")
+        
+        elif filename.endswith('.csv') or file.content_type == 'text/csv':
+            # CSV import
+            csv_content = file_content.decode('utf-8')
+            reader = csv.DictReader(StringIO(csv_content))
+            rows = list(reader)
+        
+        elif filename.endswith(('.xlsx', '.xls')) or 'spreadsheet' in (file.content_type or ''):
+            # Excel import
+            try:
+                from openpyxl import load_workbook
+                wb = load_workbook(BytesIO(file_content))
+                ws = wb.active
+                
+                # Read headers
+                headers = [cell.value for cell in ws[1]]
+                rows = []
+                for row in ws.iter_rows(min_row=2, values_only=False):
+                    row_dict = {}
+                    for i, cell in enumerate(row):
+                        if i < len(headers) and headers[i]:
+                            row_dict[headers[i]] = cell.value
+                    if any(row_dict.values()):  # Skip empty rows
+                        rows.append(row_dict)
+            except ImportError:
+                raise HTTPException(status_code=500, detail="Excel import requires openpyxl library")
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid Excel file: {e}")
+        
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Use CSV, JSON, or Excel.")
+        
+        # Process rows
+        now = utcnow_iso()
+        for idx, row in enumerate(rows, start=2):  # Start at 2 for Excel compatibility
+            try:
+                # Extract IP (required)
+                ip = str(row.get('ip', row.get('IP', ''))).strip()
+                if not ip:
+                    errors.append({"row": idx, "error": "IP address is required"})
+                    continue
+                
+                # Validate IP is in subnet
+                if not ip_in_subnet(ip, v.subnet_cidr):
+                    errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is outside VLAN subnet {v.subnet_cidr}"})
+                    continue
+                
+                # Check for duplicates
+                if any(a.ip == ip and not a.archived for a in v.assignments):
+                    errors.append({"row": idx, "ip": ip, "error": f"IP {ip} already exists in this VLAN"})
+                    continue
+                
+                # Check if reserved
+                res = reserved_set(v, data.settings.model_dump())
+                if ip in res:
+                    errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is reserved in this VLAN"})
+                    continue
+                
+                # Extract other fields
+                hostname = str(row.get('hostname', row.get('Hostname', ''))).strip()
+                assignment_type = str(row.get('type', row.get('Type', 'server'))).strip() or 'server'
+                
+                # Handle tags (can be comma-separated string or list)
+                tags_raw = row.get('tags', row.get('Tags', ''))
+                if isinstance(tags_raw, list):
+                    tags = [str(t).strip() for t in tags_raw if t]
+                else:
+                    tags = [t.strip() for t in str(tags_raw).split(',') if t.strip()]
+                
+                notes = str(row.get('notes', row.get('Notes', ''))).strip()
+                
+                # Create assignment
+                a = Assignment(
+                    id=ulid_like("asgn"),
+                    ip=ip,
+                    hostname=hostname,
+                    type=assignment_type,
+                    tags=tags,
+                    notes=notes,
+                    icon=None,
+                    archived=False,
+                    created_at=now,
+                    updated_at=now,
+                )
+                
+                v.assignments.append(a)
+                imported.append({"ip": ip, "hostname": hostname})
+                
+            except Exception as e:
+                errors.append({"row": idx, "error": f"Error processing row: {str(e)}"})
+        
+        if imported:
+            v.updated_at = now
+            save_data(DATA_DIR, data)
+            audit(user, "assignment.import", "assignment", f"bulk_{vlan_id}", v.id, None, {"count": len(imported)})
+        
+        return {
+            "ok": True,
+            "imported": len(imported),
+            "errors": len(errors),
+            "imported_items": imported,
+            "error_details": errors
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
 
 
 # ---------------- AUDIT LOGS ----------------

@@ -868,6 +868,27 @@ const state = {
           <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             <button id="nextBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium">Next available</button>
             <button id="addBtn" class="px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 min-h-[44px] text-sm">+ Add</button>
+            <div class="flex gap-2">
+              <div class="relative">
+                <button id="exportBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                  Export
+                </button>
+                <div id="exportMenu" class="hidden absolute top-full mt-1 right-0 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg z-50 min-w-[120px]">
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="csv">CSV</button>
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="json">JSON</button>
+                  <button class="exportFormatBtn w-full text-left px-4 py-2 hover:bg-zinc-800 text-sm" data-format="excel">Excel</button>
+                </div>
+              </div>
+              <button id="importBtn" class="px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm font-medium flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Import
+              </button>
+            </div>
             <div class="flex-1"></div>
             <button id="viewToggle" class="md:hidden px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 min-h-[44px] text-sm flex items-center justify-center gap-2">
               <span id="viewToggleText">Card View</span>
@@ -957,6 +978,54 @@ const state = {
         setButtonLoading(nextBtn, false);
       }
     };
+
+    // Export button handler
+    const exportBtn = wrap.querySelector("#exportBtn");
+    const exportMenu = wrap.querySelector("#exportMenu");
+    let exportMenuOpen = false;
+    
+    exportBtn.onclick = (e) => {
+      e.stopPropagation();
+      exportMenuOpen = !exportMenuOpen;
+      exportMenu.classList.toggle("hidden", !exportMenuOpen);
+    };
+    
+    // Close export menu when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+        exportMenuOpen = false;
+        exportMenu.classList.add("hidden");
+      }
+    });
+    
+    // Export format handlers
+    wrap.querySelectorAll(".exportFormatBtn").forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        exportMenuOpen = false;
+        exportMenu.classList.add("hidden");
+        
+        const format = btn.dataset.format;
+        const search = (state.filterText || "").trim() || null;
+        const typeFilter = state.filterType && state.filterType !== "all" ? state.filterType : null;
+        
+        try {
+          const params = new URLSearchParams({ format });
+          if (search) params.append("search", search);
+          if (typeFilter) params.append("type_filter", typeFilter);
+          
+          const url = `/api/vlans/${vlan.id}/assignments/export?${params.toString()}`;
+          window.location.href = url;
+          toast(`Exporting as ${format.toUpperCase()}...`, { type: "info" });
+        } catch (e) {
+          toast(e.message, { type: "error" });
+        }
+      };
+    });
+    
+    // Import button handler
+    const importBtn = wrap.querySelector("#importBtn");
+    importBtn.onclick = () => openImportModal(vlan);
 
     // View toggle handler (only on mobile)
     const viewToggle = wrap.querySelector("#viewToggle");
@@ -2067,6 +2136,110 @@ const state = {
         toast(e.message, { type: "error" });
       } finally {
         setButtonLoading(saveBtn, false);
+      }
+    };
+  }
+
+  function openImportModal(vlan) {
+    const m = modalShell("Import Assignments", `
+      <div class="space-y-4">
+        <div class="text-sm text-zinc-400">
+          Import assignments from CSV, JSON, or Excel file. Required columns: <code class="text-zinc-300">ip</code>. 
+          Optional columns: <code class="text-zinc-300">hostname</code>, <code class="text-zinc-300">type</code>, 
+          <code class="text-zinc-300">tags</code> (comma-separated), <code class="text-zinc-300">notes</code>.
+        </div>
+        <div>
+          <label class="text-xs text-zinc-400 mb-2 block">File</label>
+          <input type="file" id="importFile" accept=".csv,.json,.xlsx,.xls" class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600 min-h-[44px] text-sm" />
+        </div>
+        <div id="importResults" class="hidden space-y-2">
+          <div id="importSuccess" class="text-sm text-green-400"></div>
+          <div id="importErrors" class="text-sm text-red-400 space-y-1"></div>
+        </div>
+        <div class="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+          <button id="cancelImport" class="min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 text-sm font-medium">Cancel</button>
+          <button id="importSubmit" class="min-h-[44px] px-4 py-2.5 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 text-sm">Import</button>
+        </div>
+      </div>
+    `);
+
+    const fileInput = m.querySelector("#importFile");
+    const importBtn = m.querySelector("#importSubmit");
+    const cancelBtn = m.querySelector("#cancelImport");
+    const resultsDiv = m.querySelector("#importResults");
+    const successDiv = m.querySelector("#importSuccess");
+    const errorsDiv = m.querySelector("#importErrors");
+
+    cancelBtn.onclick = () => m.remove();
+
+    importBtn.onclick = async () => {
+      if (!fileInput.files || fileInput.files.length === 0) {
+        toast("Please select a file", { type: "error" });
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+
+      setButtonLoading(importBtn, true, "Importing...");
+      resultsDiv.classList.add("hidden");
+      successDiv.textContent = "";
+      errorsDiv.innerHTML = "";
+
+      try {
+        const result = await api(`/api/vlans/${vlan.id}/assignments/import`, {
+          method: "POST",
+          body: formData,
+          loadingKey: `import-${vlan.id}`
+        });
+
+        if (result.imported > 0) {
+          successDiv.textContent = `Successfully imported ${result.imported} assignment(s)`;
+          toast(`Imported ${result.imported} assignment(s)`, { type: "success" });
+          
+          // Reload VLAN data
+          const updatedVlan = await api(`/api/vlans/${vlan.id}`, { loadingKey: `vlan-${vlan.id}` });
+          state.currentVlan = updatedVlan;
+          Object.assign(vlan, updatedVlan);
+          
+          // Re-render rows
+          const tbody = document.querySelector("#rows");
+          if (tbody) renderRows(tbody, updatedVlan);
+        }
+
+        if (result.errors > 0) {
+          let errorHtml = `<div class="font-semibold">${result.errors} error(s) occurred:</div>`;
+          if (result.error_details && result.error_details.length > 0) {
+            const errorList = result.error_details.slice(0, 10).map(err => {
+              const row = err.row ? `Row ${err.row}: ` : "";
+              const ip = err.ip ? `${err.ip} - ` : "";
+              return `<div>${row}${ip}${escapeHtml(err.error)}</div>`;
+            }).join("");
+            errorHtml += errorList;
+            if (result.error_details.length > 10) {
+              errorHtml += `<div class="text-zinc-500">... and ${result.error_details.length - 10} more errors</div>`;
+            }
+          }
+          errorsDiv.innerHTML = errorHtml;
+        }
+
+        if (result.errors > 0 || result.imported > 0) {
+          resultsDiv.classList.remove("hidden");
+        }
+
+        if (result.imported > 0) {
+          // Close modal after successful import
+          setTimeout(() => {
+            m.remove();
+          }, 2000);
+        }
+      } catch (e) {
+        toast(e.message, { type: "error" });
+        errorsDiv.innerHTML = `<div>${escapeHtml(e.message)}</div>`;
+        resultsDiv.classList.remove("hidden");
+      } finally {
+        setButtonLoading(importBtn, false);
       }
     };
   }
