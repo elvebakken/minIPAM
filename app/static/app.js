@@ -1696,13 +1696,13 @@ const state = {
     
     // Combined stats with progress bars aligned on same line
     const statsDiv = document.createElement("div");
-    statsDiv.className = "text-xs text-zinc-400 mb-3 space-y-1.5";
+    statsDiv.className = "text-xs text-zinc-400 mb-3 space-y-1";
     
     // Used row with label and progress bar
     const usedRow = document.createElement("div");
-    usedRow.className = "flex items-center gap-2";
+    usedRow.className = "flex items-center gap-1";
     const usedLabel = document.createElement("div");
-    usedLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    usedLabel.className = "flex items-center gap-1.5 shrink-0";
     usedLabel.innerHTML = `
       <span>Used:</span>
       <span class="text-zinc-200 font-medium">${used} (${pct}%)</span>
@@ -1719,9 +1719,9 @@ const state = {
     
     // Reserved row with label and progress bar
     const reservedRow = document.createElement("div");
-    reservedRow.className = "flex items-center gap-2";
+    reservedRow.className = "flex items-center gap-1";
     const reservedLabel = document.createElement("div");
-    reservedLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    reservedLabel.className = "flex items-center gap-1.5 shrink-0";
     reservedLabel.innerHTML = `
       <span>Reserved:</span>
       <span class="text-zinc-200 font-medium">${reserved}</span>
@@ -1738,9 +1738,9 @@ const state = {
     
     // Free row with label and progress bar
     const freeRow = document.createElement("div");
-    freeRow.className = "flex items-center gap-2";
+    freeRow.className = "flex items-center gap-1";
     const freeLabel = document.createElement("div");
-    freeLabel.className = "flex justify-between items-center flex-1 min-w-[120px]";
+    freeLabel.className = "flex items-center gap-1.5 shrink-0";
     const freeCount = Math.max(0, total - used - reserved);
     freeLabel.innerHTML = `
       <span>Free:</span>
@@ -1938,7 +1938,7 @@ const state = {
 
     for (const a of list) {
       const card = el(`
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-3 transition-all duration-200 hover:border-zinc-700 animate-fadeIn">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-3 transition-all duration-200 hover:border-zinc-700 animate-fadeIn cursor-pointer" data-card-clickable>
           <div class="flex items-start gap-3">
             ${a.icon?.data_base64 ? 
               `<img src="data:${escapeHtml(a.icon.mime_type || "image/png")};base64,${a.icon.data_base64}" class="w-12 h-12 rounded-md border border-zinc-800 object-cover object-center flex-shrink-0" loading="lazy" />` :
@@ -1964,85 +1964,10 @@ const state = {
           ${a.notes ? `
             <div class="text-sm text-zinc-300 line-clamp-2">${escapeHtml(a.notes)}</div>
           ` : ''}
-          
-          <div class="flex gap-2 pt-2 border-t border-zinc-800">
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 hover:scale-[1.02]" data-edit aria-label="Edit assignment">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-              </svg>
-              Edit
-            </button>
-            <button class="flex-1 min-h-[44px] px-4 py-2.5 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center justify-center gap-2 text-sm font-medium text-red-400 transition-all duration-200 hover:scale-[1.02]" data-del aria-label="Delete assignment">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-              </svg>
-              Delete
-            </button>
-          </div>
         </div>
       `);
       
-      card.querySelector("[data-edit]").onclick = () => openAssignmentModal(vlan, a);
-      card.querySelector("[data-del]").onclick = async () => {
-        if (!confirm(`Delete ${a.ip}?`)) return;
-        const delBtn = card.querySelector("[data-del]");
-        setButtonLoading(delBtn, true);
-        
-        // Store assignment data for undo
-        const deletedAssignment = {
-          vlanId: vlan.id,
-          assignment: {
-            ip: a.ip,
-            hostname: a.hostname,
-            type: a.type,
-            tags: a.tags || [],
-            notes: a.notes || "",
-            icon: a.icon
-          }
-        };
-        
-        try {
-          await api(`/api/vlans/${vlan.id}/assignments/${a.id}`, { method:"DELETE", loadingKey: `delete-${a.id}` });
-          
-          // Show toast with undo option
-          toast(`Deleted ${a.ip}`, { 
-            type: "success",
-            duration: 5000,
-            action: {
-              label: "Undo",
-              onClick: async () => {
-                try {
-                  await api(`/api/vlans/${deletedAssignment.vlanId}/assignments`, {
-                    method: "POST",
-                    body: deletedAssignment.assignment,
-                    loadingKey: `undo-${deletedAssignment.vlanId}`
-                  });
-                  toast("Restored", { type: "success" });
-                  const fresh = await api(`/api/vlans/${deletedAssignment.vlanId}`, { loadingKey: `vlan-${deletedAssignment.vlanId}` });
-                  state.currentVlan = fresh;
-                  Object.assign(vlan, fresh);
-                  const cardContainer = document.querySelector("#cardContainer");
-                  const tbody = document.querySelector("#rows");
-                  renderRows(tbody, vlan);
-                } catch (e) {
-                  toast(e.message, { type: "error" });
-                }
-              }
-            }
-          });
-          
-          const fresh = await api(`/api/vlans/${vlan.id}`, { loadingKey: `vlan-${vlan.id}` });
-          state.currentVlan = fresh;
-          Object.assign(vlan, fresh);
-          const cardContainer = document.querySelector("#cardContainer");
-          const tbody = document.querySelector("#rows");
-          renderRows(tbody, vlan);
-        } catch (e) { 
-          toast(e.message, { type: "error" });
-        } finally {
-          setButtonLoading(delBtn, false);
-        }
-      };
+      card.onclick = () => openAssignmentModal(vlan, a);
 
       container.appendChild(card);
     }
@@ -2327,26 +2252,36 @@ const state = {
           </div>
         </div>
   
-        <div class="flex justify-end gap-2 pt-2">
-          <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center gap-2 transition-all duration-200 min-h-[44px]">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-            Cancel
-          </button>
-          <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 flex items-center gap-2 transition-all duration-200 hover:scale-[1.02] min-h-[44px]">
-            ${isEdit ? `
+        <div class="flex justify-between items-center gap-2 pt-2">
+          ${isEdit ? `
+            <button id="delete" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center gap-2 transition-all duration-200 min-h-[44px] text-red-400 hover:text-red-300">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
               </svg>
-              Save
-            ` : `
+              Delete
+            </button>
+          ` : '<div></div>'}
+          <div class="flex gap-2">
+            <button id="cancel" class="px-4 py-2 rounded-lg border border-zinc-800 hover:bg-zinc-950 flex items-center gap-2 transition-all duration-200 min-h-[44px]">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
               </svg>
-              Add
-            `}
-          </button>
+              Cancel
+            </button>
+            <button id="save" class="px-4 py-2 rounded-lg bg-white text-zinc-900 font-medium hover:opacity-90 flex items-center gap-2 transition-all duration-200 hover:scale-[1.02] min-h-[44px]">
+              ${isEdit ? `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                Save
+              ` : `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                </svg>
+                Add
+              `}
+            </button>
+          </div>
         </div>
       </div>
     `);
@@ -2628,6 +2563,78 @@ const state = {
     };
 
     m.querySelector("#cancel").onclick = () => m.remove();
+  
+    // Delete button (only shown when editing)
+    if (isEdit && existing) {
+      const deleteBtn = m.querySelector("#delete");
+      if (deleteBtn) {
+        deleteBtn.onclick = async () => {
+          if (!confirm(`Delete ${existing.ip}?`)) return;
+          setButtonLoading(deleteBtn, true);
+          
+          // Store assignment data for undo
+          const deletedAssignment = {
+            vlanId: vlan.id,
+            assignment: {
+              ip: existing.ip,
+              hostname: existing.hostname,
+              type: existing.type,
+              tags: existing.tags || [],
+              notes: existing.notes || "",
+              icon: existing.icon
+            }
+          };
+          
+          try {
+            await api(`/api/vlans/${vlan.id}/assignments/${existing.id}`, { method:"DELETE", loadingKey: `delete-${existing.id}` });
+            
+            // Show toast with undo option
+            toast(`Deleted ${existing.ip}`, { 
+              type: "success",
+              duration: 5000,
+              action: {
+                label: "Undo",
+                onClick: async () => {
+                  try {
+                    await api(`/api/vlans/${deletedAssignment.vlanId}/assignments`, {
+                      method: "POST",
+                      body: deletedAssignment.assignment,
+                      loadingKey: `undo-${deletedAssignment.vlanId}`
+                    });
+                    toast("Restored", { type: "success" });
+                    const fresh = await api(`/api/vlans/${deletedAssignment.vlanId}`, { loadingKey: `vlan-${deletedAssignment.vlanId}` });
+                    state.currentVlan = fresh;
+                    Object.assign(vlan, fresh);
+                    const tbody = document.querySelector("#rows");
+                    const header = document.querySelector("#header");
+                    renderVlanHeader(header, vlan);
+                    renderRows(tbody, vlan);
+                  } catch (e) {
+                    toast(e.message, { type: "error" });
+                  }
+                }
+              }
+            });
+            
+            const fresh = await api(`/api/vlans/${vlan.id}`, { loadingKey: `vlan-${vlan.id}` });
+            state.currentVlan = fresh;
+            Object.assign(vlan, fresh);
+            
+            // rerender
+            const tbody = document.querySelector("#rows");
+            const header = document.querySelector("#header");
+            renderVlanHeader(header, vlan);
+            renderRows(tbody, vlan);
+            
+            m.remove();
+          } catch (e) {
+            toast(e.message, { type: "error" });
+          } finally {
+            setButtonLoading(deleteBtn, false);
+          }
+        };
+      }
+    }
   
     const saveBtn = m.querySelector("#save");
     saveBtn.onclick = async () => {
