@@ -104,7 +104,7 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/minIPAM.git
+   git clone https://github.com/elvebakken/minIPAM.git
    cd minIPAM
    ```
 
@@ -323,7 +323,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/minIPAM/issues)
+- **Issues**: [GitHub Issues](https://github.com/elvebakken/minIPAM/issues)
 - **Documentation**: See the `/docs` endpoint when running the server
 
 ---
