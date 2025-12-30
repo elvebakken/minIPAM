@@ -19,19 +19,26 @@ from .models import (
     LoginRequest, MeResponse, CreateVlanRequest, PatchVlanRequest,
     CreateAssignmentRequest, PatchAssignmentRequest, PatchSettingsRequest,
     ChangePasswordRequest, ChangeUsernameRequest, CreateUserRequest,
-    Vlan, Assignment, User
+    PasswordStrengthRequest, Vlan, Assignment, User
 )
 from .storage import ensure_files, ensure_admin_user, load_data, save_data, load_users, save_users
 from .auth import (
     COOKIE_NAME, cookie_params, create_session_token,
     verify_password, hash_password, require_user, require_role,
-    generate_csrf_token, set_csrf_cookie, require_csrf, require_csrf_and_role
+    generate_csrf_token, set_csrf_cookie, require_csrf, require_csrf_and_role,
+    validate_password_strength, calculate_password_strength,
+    check_password_history, update_password_history, is_password_expired, get_password_expiration_date
 )
 from .rate_limit import (
     get_client_ip, check_rate_limit, record_failed_attempt, record_successful_login
 )
 from .ipcalc import parse_network, usable_range, gateway_suggestion, ip_in_subnet, is_network_or_broadcast, next_available_ip
 from .audit import append_audit, utcnow_iso, read_audit_logs
+from .validation import (
+    sanitize_hostname, sanitize_notes, sanitize_tags, sanitize_vlan_name,
+    sanitize_username, sanitize_device_type, sanitize_reserved_reason,
+    validate_uploaded_image
+)
 
 
 def ulid_like(prefix: str) -> str:
@@ -44,10 +51,129 @@ ensure_files(DATA_DIR)
 
 app = FastAPI(title="Mini-IPAM", version="0.1.0")
 
+
+@app.middleware("http")
+async def enforce_https(request: Request, call_next):
+    """
+    Enforce HTTPS in production by redirecting HTTP to HTTPS.
+    This middleware must run first to catch HTTP requests before processing.
+    
+    When behind a reverse proxy, the proxy should set X-Forwarded-Proto header.
+    """
+    # Check if we're in production (COOKIE_SECURE=true indicates HTTPS is expected)
+    is_production = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    
+    if is_production:
+        # Check if request is HTTP (not HTTPS)
+        # In production behind a reverse proxy, check X-Forwarded-Proto header first
+        # This is the most reliable indicator when behind a proxy
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "").lower()
+        url_scheme = request.url.scheme.lower()
+        
+        # If we detect HTTP (either via scheme or forwarded-proto header), redirect to HTTPS
+        is_http = forwarded_proto == "http" or (not forwarded_proto and url_scheme == "http")
+        
+        if is_http:
+            # Get the host from the request (prefer Host header, fallback to URL)
+            host = request.headers.get("Host") or request.url.hostname
+            if not host:
+                host = request.url.hostname
+            
+            # Build HTTPS URL (preserve path and query string)
+            https_url = f"https://{host}{request.url.path}"
+            if request.url.query:
+                https_url += f"?{request.url.query}"
+            
+            # Return 301 permanent redirect to HTTPS
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=https_url, status_code=301)
+    
+    # Continue with the request if HTTPS or not in production
+    response = await call_next(request)
+    return response
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    
+    # Content-Security-Policy: Prevent XSS attacks
+    # Allow self-hosted resources, Tailwind CDN, and API calls to same origin
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "img-src 'self' data:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self';"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    
+    # X-Frame-Options: Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    
+    # X-Content-Type-Options: Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    
+    # Referrer-Policy: Control referrer information
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Permissions-Policy: Restrict browser features
+    # Disable geolocation, microphone, camera, and other sensitive features
+    permissions_policy = (
+        "geolocation=(), "
+        "microphone=(), "
+        "camera=(), "
+        "payment=(), "
+        "usb=(), "
+        "magnetometer=(), "
+        "gyroscope=(), "
+        "accelerometer=()"
+    )
+    response.headers["Permissions-Policy"] = permissions_policy
+    
+    # Strict-Transport-Security: Always add HSTS header when HTTPS is enabled (production)
+    # This forces browsers to use HTTPS for all future connections
+    if os.getenv("COOKIE_SECURE", "false").lower() == "true":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
+    return response
+
+
 @app.on_event("startup")
 def startup_event():
-    """Create admin user on startup if needed."""
+    """Create admin user on startup if needed and validate HTTPS configuration."""
     ensure_admin_user(DATA_DIR)
+    
+    # Validate HTTPS/TLS configuration in production
+    cookie_secure = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    environment = os.getenv("ENVIRONMENT", "").lower()
+    is_production = environment == "production" or cookie_secure
+    
+    if is_production:
+        # In production, COOKIE_SECURE must be true
+        if not cookie_secure:
+            import sys
+            print("=" * 60, file=sys.stderr)
+            print("WARNING: Production mode detected but COOKIE_SECURE is not set to 'true'", file=sys.stderr)
+            print("Set COOKIE_SECURE=true in production to enable secure cookies and HTTPS enforcement.", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+        
+        # Warn if running directly (should be behind reverse proxy)
+        print("=" * 60)
+        print("Mini-IPAM: Production Mode")
+        print("=" * 60)
+        print("HTTPS enforcement: ENABLED")
+        print("HSTS header: ENABLED")
+        print("Secure cookies: ENABLED" if cookie_secure else "Secure cookies: DISABLED (WARNING)")
+        print("=" * 60)
+        print("IMPORTANT: Ensure the application is behind a reverse proxy (nginx, Traefik, Caddy)")
+        print("that handles TLS termination. The application will redirect HTTP to HTTPS.")
+        print("=" * 60)
 
 
 def audit(user: dict, action: str, entity: str, entity_id: str, vlan_id: Optional[str], before: Any, after: Any):
@@ -69,6 +195,18 @@ def audit(user: dict, action: str, entity: str, entity_id: str, vlan_id: Optiona
 @app.get("/api/health")
 def health():
     return {"ok": True}
+
+
+@app.post("/api/auth/password-strength")
+def password_strength(payload: PasswordStrengthRequest):
+    """Calculate password strength score and provide feedback."""
+    if not payload.password:
+        return {
+            "score": 0,
+            "level": "weak",
+            "feedback": ["Enter a password to check strength"]
+        }
+    return calculate_password_strength(payload.password)
 
 
 # ---------------- AUTH ----------------
@@ -97,6 +235,12 @@ def login(payload: LoginRequest, request: Request, response: Response):
         record_failed_attempt(DATA_DIR, client_ip, username)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    # Check if password is expired
+    password_expired, expiration_date = is_password_expired(user.password_changed_at)
+    if password_expired:
+        user.password_change_required = True
+        save_users(DATA_DIR, users_file)
+    
     # Successful login - clear rate limiting state for this username
     record_successful_login(DATA_DIR, client_ip, username)
 
@@ -107,12 +251,16 @@ def login(payload: LoginRequest, request: Request, response: Response):
     csrf_token = generate_csrf_token()
     set_csrf_cookie(response, csrf_token)
     
+    # Calculate password expiration date for response
+    password_expires_at = get_password_expiration_date(user.password_changed_at)
+    
     return {
         "ok": True,
         "user": {
             "username": user.username,
             "role": user.role,
-            "password_change_required": user.password_change_required
+            "password_change_required": user.password_change_required or password_expired,
+            "password_expires_at": password_expires_at
         }
     }
 
@@ -134,11 +282,24 @@ def change_password(payload: ChangePasswordRequest, user=Depends(require_csrf)):
     if not verify_password(payload.current_password, db_user.password_bcrypt):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
     
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    # Validate password strength (complexity requirements)
+    is_valid, error_msg = validate_password_strength(payload.new_password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
     
+    # Check password history
+    is_reused, history_error = check_password_history(payload.new_password, db_user.password_history or [])
+    if is_reused:
+        raise HTTPException(status_code=400, detail=history_error)
+    
+    # Update password history before changing password
+    old_hash = db_user.password_bcrypt
+    db_user.password_history = update_password_history(old_hash, db_user.password_history or [])
+    
+    # Set new password
     db_user.password_bcrypt = hash_password(payload.new_password)
     db_user.password_change_required = False
+    db_user.password_changed_at = utcnow_iso()
     
     save_users(DATA_DIR, users_file)
     audit(user, "user.password_change", "user", db_user.id, None, None, {"password_changed": True})
@@ -152,10 +313,8 @@ def change_username(payload: ChangeUsernameRequest, response: Response, user=Dep
     if not db_user or db_user.disabled:
         raise HTTPException(status_code=404, detail="User not found")
     
-    new_username = payload.new_username.strip()
-    if not new_username:
-        raise HTTPException(status_code=400, detail="Username cannot be empty")
-    
+    # Sanitize and validate username
+    new_username = sanitize_username(payload.new_username)
     if len(new_username) < 3:
         raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
     
@@ -181,15 +340,26 @@ def me(response: Response, request: Request, user=Depends(require_user)):
     db_user = next((u for u in users_file.users if u.username == user["u"]), None)
     password_change_required = db_user.password_change_required if db_user else False
     
+    # Check if password is expired
+    password_expired, _ = is_password_expired(db_user.password_changed_at if db_user else None)
+    if password_expired and db_user:
+        password_change_required = True
+        db_user.password_change_required = True
+        save_users(DATA_DIR, users_file)
+    
     # Ensure CSRF token cookie is set (refresh if missing)
     if not request.cookies.get("csrf_token"):
         csrf_token = generate_csrf_token()
         set_csrf_cookie(response, csrf_token)
     
+    # Calculate password expiration date
+    password_expires_at = get_password_expiration_date(db_user.password_changed_at if db_user else None)
+    
     return {
         "username": user["u"],
         "role": user["r"],
-        "password_change_required": password_change_required
+        "password_change_required": password_change_required,
+        "password_expires_at": password_expires_at
     }
 
 
@@ -201,16 +371,15 @@ def create_user(payload: CreateUserRequest, user=Depends(require_csrf_and_role({
     if any(u.username == payload.username for u in users_file.users):
         raise HTTPException(status_code=409, detail="Username already exists")
     
-    # Validate username
-    username = payload.username.strip()
-    if not username:
-        raise HTTPException(status_code=400, detail="Username cannot be empty")
+    # Sanitize and validate username
+    username = sanitize_username(payload.username)
     if len(username) < 3:
         raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
     
-    # Validate password
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Validate password strength (complexity requirements)
+    is_valid, error_msg = validate_password_strength(payload.password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
     
     # Create new user
     now = utcnow_iso()
@@ -221,7 +390,9 @@ def create_user(payload: CreateUserRequest, user=Depends(require_csrf_and_role({
         role=payload.role,
         created_at=now,
         disabled=False,
-        password_change_required=False
+        password_change_required=False,
+        password_history=[],
+        password_changed_at=now
     )
     
     users_file.users.append(new_user)
@@ -331,6 +502,10 @@ def list_vlans(user=Depends(require_user)):
 @app.post("/api/vlans")
 def create_vlan(payload: CreateVlanRequest, user=Depends(require_csrf_and_role({"admin", "readwrite"}))):
     data = load_data(DATA_DIR)
+    
+    # Sanitize and validate VLAN name
+    sanitized_name = sanitize_vlan_name(payload.name)
+    
     # validate cidr
     try:
         net = parse_network(payload.subnet_cidr)
@@ -344,7 +519,7 @@ def create_vlan(payload: CreateVlanRequest, user=Depends(require_csrf_and_role({
     now = utcnow_iso()
     v = Vlan(
         id=ulid_like("vlan"),
-        name=payload.name,
+        name=sanitized_name,
         vlan_id=payload.vlan_id,
         subnet_cidr=str(net),
         gateway_ip=gateway_suggestion(net) if data.settings.gateway_default == "first_usable" else None,
@@ -385,7 +560,7 @@ def patch_vlan(vlan_id: str, payload: PatchVlanRequest, user=Depends(require_csr
     before = v.model_dump()
 
     if payload.name is not None:
-        v.name = payload.name
+        v.name = sanitize_vlan_name(payload.name)
     if payload.vlan_id is not None:
         v.vlan_id = payload.vlan_id
     if payload.subnet_cidr is not None:
@@ -480,14 +655,20 @@ def create_assignment(vlan_id: str, payload: CreateAssignmentRequest, user=Depen
 
     normalize_and_validate_assignment(v, data.settings.model_dump(), payload.ip)
 
+    # Sanitize all user inputs
+    sanitized_hostname = sanitize_hostname(payload.hostname)
+    sanitized_type = sanitize_device_type(payload.type)
+    sanitized_tags = sanitize_tags(payload.tags)
+    sanitized_notes = sanitize_notes(payload.notes)
+
     now = utcnow_iso()
     a = Assignment(
         id=ulid_like("asgn"),
         ip=payload.ip,
-        hostname=payload.hostname,
-        type=payload.type,
-        tags=payload.tags,
-        notes=payload.notes,
+        hostname=sanitized_hostname,
+        type=sanitized_type,
+        tags=sanitized_tags,
+        notes=sanitized_notes,
         icon=payload.icon,
         archived=False,
         created_at=now,
@@ -516,13 +697,13 @@ def patch_assignment(vlan_id: str, assignment_id: str, payload: PatchAssignmentR
         normalize_and_validate_assignment(v, data.settings.model_dump(), payload.ip, assignment_id=a.id)
         a.ip = payload.ip
     if payload.hostname is not None:
-        a.hostname = payload.hostname
+        a.hostname = sanitize_hostname(payload.hostname)
     if payload.type is not None:
-        a.type = payload.type
+        a.type = sanitize_device_type(payload.type)
     if payload.tags is not None:
-        a.tags = payload.tags
+        a.tags = sanitize_tags(payload.tags)
     if payload.notes is not None:
-        a.notes = payload.notes
+        a.notes = sanitize_notes(payload.notes)
     if payload.icon is not None:
         a.icon = payload.icon
     if payload.archived is not None:
@@ -610,8 +791,9 @@ def normalize_icon(user=Depends(require_csrf_and_role({"admin", "readwrite"})), 
         raise HTTPException(status_code=400, detail="Only images are allowed")
 
     raw = file.file.read()
-    if len(raw) > 2_000_000:
-        raise HTTPException(status_code=400, detail="Image too large (max 2MB)")
+    
+    # Validate image using magic bytes (more secure than MIME type alone)
+    validate_uploaded_image(raw, file.content_type, max_size=2_000_000)
 
     try:
         img = Image.open(BytesIO(raw)).convert("RGBA")
@@ -648,8 +830,12 @@ async def upload_multiple_icons(user=Depends(require_csrf_and_role({"admin"})), 
         
         try:
             raw = await file.read()
-            if len(raw) > 2_000_000:
-                errors.append({"filename": file.filename, "error": "Image too large (max 2MB)"})
+            
+            # Validate image using magic bytes (more secure than MIME type alone)
+            try:
+                validate_uploaded_image(raw, file.content_type, max_size=2_000_000)
+            except HTTPException as e:
+                errors.append({"filename": file.filename, "error": e.detail})
                 continue
             
             # Validate and normalize image
@@ -947,18 +1133,28 @@ def import_assignments(
                     errors.append({"row": idx, "ip": ip, "error": f"IP {ip} is reserved in this VLAN"})
                     continue
                 
-                # Extract other fields
-                hostname = str(row.get('hostname', row.get('Hostname', ''))).strip()
-                assignment_type = str(row.get('type', row.get('Type', 'server'))).strip() or 'server'
+                # Extract and sanitize other fields
+                hostname_raw = str(row.get('hostname', row.get('Hostname', ''))).strip()
+                type_raw = str(row.get('type', row.get('Type', 'server'))).strip() or 'server'
                 
                 # Handle tags (can be comma-separated string or list)
                 tags_raw = row.get('tags', row.get('Tags', ''))
                 if isinstance(tags_raw, list):
-                    tags = [str(t).strip() for t in tags_raw if t]
+                    tags_list = [str(t).strip() for t in tags_raw if t]
                 else:
-                    tags = [t.strip() for t in str(tags_raw).split(',') if t.strip()]
+                    tags_list = [t.strip() for t in str(tags_raw).split(',') if t.strip()]
                 
-                notes = str(row.get('notes', row.get('Notes', ''))).strip()
+                notes_raw = str(row.get('notes', row.get('Notes', ''))).strip()
+                
+                # Sanitize all inputs
+                try:
+                    hostname = sanitize_hostname(hostname_raw)
+                    assignment_type = sanitize_device_type(type_raw)
+                    tags = sanitize_tags(tags_list)
+                    notes = sanitize_notes(notes_raw)
+                except HTTPException as e:
+                    errors.append({"row": idx, "error": f"Validation error: {e.detail}"})
+                    continue
                 
                 # Create assignment
                 a = Assignment(

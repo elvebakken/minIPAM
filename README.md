@@ -1,5 +1,3 @@
-# 🌐 Mini-IPAM
-
 <div align="center">
 
 <img src="minipam.png" alt="Mini-IPAM Logo" width="200">
@@ -220,7 +218,8 @@ All data is stored in JSON files in the `DATA_DIR` directory:
 - [ ] Change default admin password
 - [ ] Set a strong `SECRET_KEY` (minimum 32 characters)
 - [ ] Set `COOKIE_SECURE=true` when using HTTPS
-- [ ] Use HTTPS/TLS in production
+- [ ] Deploy behind a reverse proxy (nginx, Traefik, Caddy) with TLS termination
+- [ ] Use HTTPS/TLS in production (HTTP will be automatically redirected to HTTPS)
 - [ ] Regularly backup `appdata/` directory
 - [ ] Review and rotate `SECRET_KEY` periodically
 - [ ] Monitor `audit.log` for suspicious activity
@@ -228,6 +227,8 @@ All data is stored in JSON files in the `DATA_DIR` directory:
 
 ### Security Features
 
+- **HTTPS/TLS Enforcement**: Automatic HTTP to HTTPS redirect in production
+- **HSTS Header**: Strict-Transport-Security header forces HTTPS connections
 - **Password Security**: Bcrypt hashing with automatic salt generation
 - **Session Management**: Secure, HTTP-only cookies with configurable security
 - **CSRF Protection**: Token-based protection for state-changing operations

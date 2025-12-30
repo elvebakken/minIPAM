@@ -3,7 +3,9 @@ import os
 import time
 import secrets
 import bcrypt
-from typing import Optional, Callable
+import re
+from typing import Optional, Callable, Tuple, List
+from datetime import datetime, timezone, timedelta
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from fastapi import Request, HTTPException, Depends, Response
 
@@ -19,9 +21,11 @@ SERVER_INSTANCE_ID = f"{int(time.time()*1000)}_{secrets.token_hex(8)}"
 
 def get_secret() -> str:
     secret = os.getenv("SECRET_KEY", "")
-    if not secret or len(secret) < 16:
-        # Still works but you should set a strong one
-        secret = "dev-secret-key-change-me"
+    if not secret or len(secret) < 32:
+        raise RuntimeError(
+            "SECRET_KEY environment variable must be set and be at least 32 characters long. "
+            "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
     return secret
 
 def serializer() -> URLSafeTimedSerializer:
@@ -56,6 +60,161 @@ def verify_password(password: str, hashed: str) -> bool:
     # Verify the password
     hashed_bytes = hashed.encode('utf-8')
     return bcrypt.checkpw(password_bytes, hashed_bytes)
+
+def validate_password_strength(password: str) -> Tuple[bool, str]:
+    """
+    Validate password meets complexity requirements.
+    Returns (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+    
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+    
+    if not re.search(r'\d', password):
+        return False, "Password must contain at least one number"
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\/_+=\-~`]', password):
+        return False, "Password must contain at least one special character"
+    
+    return True, ""
+
+# Password policy configuration from environment variables
+PASSWORD_HISTORY_COUNT = int(os.getenv("PASSWORD_HISTORY_COUNT", "5"))  # Number of previous passwords to remember
+PASSWORD_EXPIRATION_DAYS = int(os.getenv("PASSWORD_EXPIRATION_DAYS", "0"))  # 0 = disabled, >0 = days until expiration
+
+def check_password_history(new_password: str, password_history: List[str]) -> Tuple[bool, str]:
+    """
+    Check if the new password matches any of the recent passwords in history.
+    Returns (is_reused, error_message)
+    """
+    if not password_history:
+        return False, ""
+    
+    for old_hash in password_history:
+        if verify_password(new_password, old_hash):
+            return True, f"Password cannot be reused. You cannot use any of your last {PASSWORD_HISTORY_COUNT} passwords."
+    
+    return False, ""
+
+def get_password_expiration_date(password_changed_at: Optional[str]) -> Optional[str]:
+    """
+    Calculate when the password will expire based on PASSWORD_EXPIRATION_DAYS.
+    Returns ISO timestamp string or None if expiration is disabled.
+    """
+    if PASSWORD_EXPIRATION_DAYS <= 0:
+        return None
+    
+    if not password_changed_at:
+        return None
+    
+    try:
+        # Parse the ISO timestamp
+        changed_dt = datetime.fromisoformat(password_changed_at.replace('Z', '+00:00'))
+        # Add expiration days
+        expires_dt = changed_dt + timedelta(days=PASSWORD_EXPIRATION_DAYS)
+        # Return as ISO string
+        return expires_dt.isoformat().replace('+00:00', 'Z')
+    except (ValueError, AttributeError):
+        return None
+
+def is_password_expired(password_changed_at: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """
+    Check if the password has expired.
+    Returns (is_expired, expiration_date_iso)
+    """
+    if PASSWORD_EXPIRATION_DAYS <= 0:
+        return False, None
+    
+    expiration_date = get_password_expiration_date(password_changed_at)
+    if not expiration_date:
+        return False, None
+    
+    try:
+        expires_dt = datetime.fromisoformat(expiration_date.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        is_expired = now >= expires_dt
+        return is_expired, expiration_date
+    except (ValueError, AttributeError):
+        return False, None
+
+def update_password_history(current_hash: str, password_history: List[str]) -> List[str]:
+    """
+    Update password history by adding current hash and keeping only the last N passwords.
+    """
+    # Add current password to history
+    new_history = [current_hash] + password_history
+    # Keep only the last PASSWORD_HISTORY_COUNT passwords
+    return new_history[:PASSWORD_HISTORY_COUNT]
+
+def calculate_password_strength(password: str) -> dict:
+    """
+    Calculate password strength score (0-100) and feedback.
+    Returns dict with score, level, and feedback messages.
+    """
+    score = 0
+    feedback = []
+    
+    # Length scoring
+    if len(password) >= 8:
+        score += 20
+    if len(password) >= 12:
+        score += 10
+    if len(password) >= 16:
+        score += 10
+    
+    # Character variety scoring
+    has_upper = bool(re.search(r'[A-Z]', password))
+    has_lower = bool(re.search(r'[a-z]', password))
+    has_digit = bool(re.search(r'\d', password))
+    has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>\[\]\\/_+=\-~`]', password))
+    
+    char_types = sum([has_upper, has_lower, has_digit, has_special])
+    score += char_types * 10
+    
+    # Additional scoring for patterns
+    if len(password) >= 8 and char_types >= 3:
+        score += 10
+    if len(password) >= 12 and char_types == 4:
+        score += 10
+    
+    # Cap at 100
+    score = min(score, 100)
+    
+    # Determine level
+    if score < 40:
+        level = "weak"
+    elif score < 70:
+        level = "fair"
+    elif score < 90:
+        level = "good"
+    else:
+        level = "strong"
+    
+    # Generate feedback
+    if len(password) < 8:
+        feedback.append("Use at least 8 characters")
+    elif len(password) < 12:
+        feedback.append("Consider using 12+ characters for better security")
+    
+    if not has_upper:
+        feedback.append("Add uppercase letters")
+    if not has_lower:
+        feedback.append("Add lowercase letters")
+    if not has_digit:
+        feedback.append("Add numbers")
+    if not has_special:
+        feedback.append("Add special characters")
+    
+    return {
+        "score": score,
+        "level": level,
+        "feedback": feedback
+    }
 
 def create_session_token(username: str, role: str) -> str:
     # Include server instance ID to invalidate sessions on container restart

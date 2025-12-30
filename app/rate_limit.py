@@ -7,8 +7,9 @@ import portalocker
 
 # Configuration
 MAX_ATTEMPTS_PER_MINUTE = 5  # Maximum login attempts per minute
-LOCKOUT_DURATION_SECONDS = 300  # 5 minutes lockout after too many failures
+BASE_LOCKOUT_DURATION_SECONDS = 300  # Base lockout duration: 5 minutes
 LOCKOUT_THRESHOLD = 5  # Number of failures before lockout
+MAX_LOCKOUT_DURATION_SECONDS = 3600  # Maximum lockout duration: 60 minutes
 
 class RateLimitState:
     """Tracks rate limiting state for login attempts."""
@@ -19,6 +20,28 @@ class RateLimitState:
         self.username_attempts: Dict[str, List[float]] = {}
         # Lockouts: {key: lockout_until_timestamp}
         self.lockouts: Dict[str, float] = {}
+        # Lockout counts: {key: count} - tracks how many times an IP/username has been locked out
+        self.lockout_counts: Dict[str, int] = {}
+
+def calculate_lockout_duration(lockout_count: int) -> int:
+    """
+    Calculate lockout duration based on number of previous lockouts.
+    Uses exponential backoff with a cap.
+    
+    Examples:
+    - 1st lockout: 5 minutes (300 seconds)
+    - 2nd lockout: 15 minutes (900 seconds)
+    - 3rd lockout: 30 minutes (1800 seconds)
+    - 4th+ lockout: 60 minutes (3600 seconds)
+    """
+    if lockout_count <= 1:
+        return BASE_LOCKOUT_DURATION_SECONDS
+    elif lockout_count == 2:
+        return BASE_LOCKOUT_DURATION_SECONDS * 3  # 15 minutes
+    elif lockout_count == 3:
+        return BASE_LOCKOUT_DURATION_SECONDS * 6  # 30 minutes
+    else:
+        return MAX_LOCKOUT_DURATION_SECONDS  # 60 minutes (cap)
 
 def get_client_ip(request) -> str:
     """Extract client IP from request, handling proxies."""
@@ -52,6 +75,7 @@ def load_auth_state(data_dir: Path) -> RateLimitState:
         state.ip_attempts = {k: [float(ts) for ts in v] for k, v in raw.get("ip_attempts", {}).items()}
         state.username_attempts = {k: [float(ts) for ts in v] for k, v in raw.get("username_attempts", {}).items()}
         state.lockouts = {k: float(v) for k, v in raw.get("lockouts", {}).items()}
+        state.lockout_counts = {k: int(v) for k, v in raw.get("lockout_counts", {}).items()}
     except (json.JSONDecodeError, KeyError, ValueError):
         # If file is corrupted, start fresh
         return state
@@ -71,7 +95,8 @@ def save_auth_state(data_dir: Path, state: RateLimitState) -> None:
     data = {
         "ip_attempts": {k: v for k, v in state.ip_attempts.items()},
         "username_attempts": {k: v for k, v in state.username_attempts.items()},
-        "lockouts": {k: v for k, v in state.lockouts.items() if v > now}  # Only save active lockouts
+        "lockouts": {k: v for k, v in state.lockouts.items() if v > now},  # Only save active lockouts
+        "lockout_counts": {k: v for k, v in state.lockout_counts.items()}  # Persist lockout counts
     }
     
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +127,24 @@ def cleanup_old_entries(state: RateLimitState, now: float) -> None:
     for key in list(state.lockouts.keys()):
         if state.lockouts[key] <= now:
             del state.lockouts[key]
+    
+    # Clean lockout counts for entries that have been expired for more than 24 hours
+    # This allows lockout counts to reset after a period of good behavior
+    reset_window = 24 * 60 * 60  # 24 hours
+    for key in list(state.lockout_counts.keys()):
+        # If there's no active lockout and no recent attempts, consider resetting
+        if key not in state.lockouts:
+            # Check if there are any recent attempts
+            if key.startswith("ip:"):
+                ip = key[3:]  # Remove "ip:" prefix
+                recent_attempts = [ts for ts in state.ip_attempts.get(ip, []) if ts > now - reset_window]
+                if not recent_attempts:
+                    del state.lockout_counts[key]
+            elif key.startswith("user:"):
+                username = key[5:]  # Remove "user:" prefix
+                recent_attempts = [ts for ts in state.username_attempts.get(username, []) if ts > now - reset_window]
+                if not recent_attempts:
+                    del state.lockout_counts[key]
 
 def check_rate_limit(data_dir: Path, ip: str, username: Optional[str]) -> tuple[bool, Optional[str]]:
     """
@@ -135,21 +178,27 @@ def check_rate_limit(data_dir: Path, ip: str, username: Optional[str]) -> tuple[
     ip_attempts = state.ip_attempts.get(ip, [])
     recent_ip_attempts = [ts for ts in ip_attempts if ts > now - 60]
     if len(recent_ip_attempts) >= MAX_ATTEMPTS_PER_MINUTE:
-        # Trigger lockout
-        state.lockouts[ip_lockout_key] = now + LOCKOUT_DURATION_SECONDS
+        # Trigger lockout with incremental backoff
+        lockout_count = state.lockout_counts.get(ip_lockout_key, 0) + 1
+        state.lockout_counts[ip_lockout_key] = lockout_count
+        lockout_duration = calculate_lockout_duration(lockout_count)
+        state.lockouts[ip_lockout_key] = now + lockout_duration
         save_auth_state(data_dir, state)
-        return False, f"Too many login attempts from this IP. Please try again in {LOCKOUT_DURATION_SECONDS} seconds."
+        return False, f"Too many login attempts from this IP. Please try again in {lockout_duration} seconds."
     
     # Check username rate limit
     if username:
         username_attempts = state.username_attempts.get(username, [])
         recent_username_attempts = [ts for ts in username_attempts if ts > now - 60]
         if len(recent_username_attempts) >= MAX_ATTEMPTS_PER_MINUTE:
-            # Trigger lockout
+            # Trigger lockout with incremental backoff
             username_lockout_key = f"user:{username}"
-            state.lockouts[username_lockout_key] = now + LOCKOUT_DURATION_SECONDS
+            lockout_count = state.lockout_counts.get(username_lockout_key, 0) + 1
+            state.lockout_counts[username_lockout_key] = lockout_count
+            lockout_duration = calculate_lockout_duration(lockout_count)
+            state.lockouts[username_lockout_key] = now + lockout_duration
             save_auth_state(data_dir, state)
-            return False, f"Too many login attempts for this username. Please try again in {LOCKOUT_DURATION_SECONDS} seconds."
+            return False, f"Too many login attempts for this username. Please try again in {lockout_duration} seconds."
     
     return True, None
 
@@ -173,13 +222,19 @@ def record_failed_attempt(data_dir: Path, ip: str, username: Optional[str]) -> N
         recent_failures = [ts for ts in state.username_attempts[username] if ts > now - 60]
         if len(recent_failures) >= LOCKOUT_THRESHOLD:
             username_lockout_key = f"user:{username}"
-            state.lockouts[username_lockout_key] = now + LOCKOUT_DURATION_SECONDS
+            lockout_count = state.lockout_counts.get(username_lockout_key, 0) + 1
+            state.lockout_counts[username_lockout_key] = lockout_count
+            lockout_duration = calculate_lockout_duration(lockout_count)
+            state.lockouts[username_lockout_key] = now + lockout_duration
     
     # Check if we should trigger IP lockout
     recent_ip_failures = [ts for ts in state.ip_attempts[ip] if ts > now - 60]
     if len(recent_ip_failures) >= LOCKOUT_THRESHOLD:
         ip_lockout_key = f"ip:{ip}"
-        state.lockouts[ip_lockout_key] = now + LOCKOUT_DURATION_SECONDS
+        lockout_count = state.lockout_counts.get(ip_lockout_key, 0) + 1
+        state.lockout_counts[ip_lockout_key] = lockout_count
+        lockout_duration = calculate_lockout_duration(lockout_count)
+        state.lockouts[ip_lockout_key] = now + lockout_duration
     
     save_auth_state(data_dir, state)
 
@@ -187,13 +242,16 @@ def record_successful_login(data_dir: Path, ip: str, username: Optional[str]) ->
     """Clear rate limiting state on successful login."""
     state = load_auth_state(data_dir)
     
-    # Clear username attempts and lockout on successful login
+    # Clear username attempts, lockout, and lockout count on successful login
     if username:
         if username in state.username_attempts:
             del state.username_attempts[username]
         username_lockout_key = f"user:{username}"
         if username_lockout_key in state.lockouts:
             del state.lockouts[username_lockout_key]
+        # Reset lockout count on successful login (good behavior reward)
+        if username_lockout_key in state.lockout_counts:
+            del state.lockout_counts[username_lockout_key]
     
     # Note: We don't clear IP attempts/lockouts on success, as the same IP
     # might be used by multiple users or attackers

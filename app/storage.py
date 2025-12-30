@@ -60,14 +60,17 @@ def ensure_admin_user(data_dir: Path) -> None:
     admin_password = generate_strong_password()
     admin_id = f"user_{int(time.time()*1000)}_{secrets.token_hex(6)}"
     
+    now = utcnow_iso()
     admin_user = User(
         id=admin_id,
         username="admin",
         password_bcrypt=hash_password(admin_password),
         role="admin",
-        created_at=utcnow_iso(),
+        created_at=now,
         disabled=False,
-        password_change_required=True
+        password_change_required=True,
+        password_history=[],
+        password_changed_at=now
     )
     
     users_file.users.append(admin_user)

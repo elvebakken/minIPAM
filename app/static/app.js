@@ -438,6 +438,67 @@ const state = {
     route();
   }
   
+  // Password strength meter helper function
+  function attachPasswordStrengthMeter(passwordInput, strengthContainer) {
+    let debounceTimer;
+    
+    passwordInput.addEventListener("input", async () => {
+      clearTimeout(debounceTimer);
+      const password = passwordInput.value;
+      
+      if (!password) {
+        strengthContainer.innerHTML = '<div class="text-xs text-zinc-500 mt-1">Password must contain: uppercase, lowercase, number, and special character</div>';
+        return;
+      }
+      
+      // Debounce API calls
+      debounceTimer = setTimeout(async () => {
+        try {
+          const result = await api("/api/auth/password-strength", {
+            method: "POST",
+            body: { password },
+            loadingKey: "password-strength"
+          });
+          
+          const levelColors = {
+            weak: "bg-red-500",
+            fair: "bg-orange-500",
+            good: "bg-yellow-500",
+            strong: "bg-green-500"
+          };
+          
+          const levelLabels = {
+            weak: "Weak",
+            fair: "Fair",
+            good: "Good",
+            strong: "Strong"
+          };
+          
+          const color = levelColors[result.level] || "bg-zinc-500";
+          const label = levelLabels[result.level] || "Weak";
+          
+          strengthContainer.innerHTML = `
+            <div class="mt-2">
+              <div class="flex items-center gap-2 mb-1">
+                <div class="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div class="h-full ${color} transition-all duration-300" style="width: ${result.score}%"></div>
+                </div>
+                <span class="text-xs font-medium ${color.replace('bg-', 'text-')}">${label}</span>
+              </div>
+              ${result.feedback && result.feedback.length > 0 ? `
+                <div class="text-xs text-zinc-400 mt-1">
+                  ${result.feedback.map(f => `• ${f}`).join('<br>')}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } catch (e) {
+          // Silently fail - don't show error for strength check
+        }
+      }, 300);
+    });
+  }
+
   function showPasswordChangeModal() {
     const m = modalShell("Setup Required", `
       <div class="space-y-3">
@@ -455,7 +516,7 @@ const state = {
         <div>
           <label class="text-xs text-zinc-400">New Password</label>
           <input id="newPassword" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
-          <div class="text-xs text-zinc-500 mt-1">Must be at least 8 characters</div>
+          <div id="newPasswordStrength" class="text-xs text-zinc-500 mt-1">Password must contain: uppercase, lowercase, number, and special character</div>
         </div>
         <div>
           <label class="text-xs text-zinc-400">Confirm New Password</label>
@@ -476,6 +537,11 @@ const state = {
     const closeBtn = m.querySelector("#close");
     if (closeBtn) closeBtn.style.display = "none";
     m.onclick = null; // Disable click-outside-to-close
+    
+    // Attach password strength meter
+    const newPasswordInput = m.querySelector("#newPassword");
+    const strengthContainer = m.querySelector("#newPasswordStrength");
+    attachPasswordStrengthMeter(newPasswordInput, strengthContainer);
     
     const saveBtn = m.querySelector("#save");
     saveBtn.onclick = async () => {
@@ -1640,7 +1706,7 @@ const state = {
         <div>
           <label class="text-xs text-zinc-400">Password</label>
           <input id="password" type="password" class="mt-1 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 outline-none focus:border-zinc-600" />
-          <div class="text-xs text-zinc-500 mt-1">Must be at least 8 characters</div>
+          <div id="passwordStrength" class="text-xs text-zinc-500 mt-1">Password must contain: uppercase, lowercase, number, and special character</div>
         </div>
         <div>
           <label class="text-xs text-zinc-400">Role</label>
@@ -1670,6 +1736,10 @@ const state = {
     const username = m.querySelector("#username");
     const password = m.querySelector("#password");
     const role = m.querySelector("#role");
+    
+    // Attach password strength meter
+    const strengthContainer = m.querySelector("#passwordStrength");
+    attachPasswordStrengthMeter(password, strengthContainer);
 
     m.querySelector("#cancel").onclick = () => m.remove();
     const saveBtn = m.querySelector("#save");

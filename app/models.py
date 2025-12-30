@@ -11,15 +11,15 @@ class Icon(BaseModel):
 
 class ReservedIP(BaseModel):
     ip: str
-    reason: str
+    reason: str = Field(default="", max_length=200)  # Max length enforced by validation
 
 class Assignment(BaseModel):
     id: str
     ip: str
-    hostname: str = ""
-    type: str = "server"
-    tags: List[str] = Field(default_factory=list)
-    notes: str = ""
+    hostname: str = Field(default="", max_length=255)  # RFC 1123 hostname max length
+    type: str = Field(default="server", max_length=50)
+    tags: List[str] = Field(default_factory=list, max_length=20)  # Max 20 tags
+    notes: str = Field(default="", max_length=5000)
     icon: Optional[Icon] = None
     archived: bool = False
     created_at: str
@@ -27,7 +27,7 @@ class Assignment(BaseModel):
 
 class Vlan(BaseModel):
     id: str
-    name: str
+    name: str = Field(max_length=100)  # Max length enforced by validation
     vlan_id: Optional[int] = None
     subnet_cidr: str
     gateway_ip: Optional[str] = None
@@ -59,6 +59,8 @@ class User(BaseModel):
     created_at: str
     disabled: bool = False
     password_change_required: bool = False
+    password_history: List[str] = Field(default_factory=list)  # Last 5 password hashes
+    password_changed_at: Optional[str] = None  # ISO timestamp of last password change
 
 class UsersFile(BaseModel):
     schema_version: int = 1
@@ -73,39 +75,40 @@ class MeResponse(BaseModel):
     username: str
     role: Role
     password_change_required: bool = False
+    password_expires_at: Optional[str] = None  # ISO timestamp when password expires
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
 class ChangeUsernameRequest(BaseModel):
-    new_username: str
+    new_username: str = Field(max_length=50)  # Max length enforced by validation
 
 class CreateVlanRequest(BaseModel):
-    name: str
+    name: str = Field(max_length=100)  # Max length enforced by validation
     vlan_id: Optional[int] = None
     subnet_cidr: str
 
 class PatchVlanRequest(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=100)  # Max length enforced by validation
     vlan_id: Optional[int] = None
     subnet_cidr: Optional[str] = None
     gateway_ip: Optional[str] = None
 
 class CreateAssignmentRequest(BaseModel):
     ip: str
-    hostname: str = ""
-    type: str = "server"
-    tags: List[str] = Field(default_factory=list)
-    notes: str = ""
+    hostname: str = Field(default="", max_length=255)  # RFC 1123 hostname max length
+    type: str = Field(default="server", max_length=50)
+    tags: List[str] = Field(default_factory=list, max_length=20)  # Max 20 tags
+    notes: str = Field(default="", max_length=5000)
     icon: Optional[Icon] = None
 
 class PatchAssignmentRequest(BaseModel):
     ip: Optional[str] = None
-    hostname: Optional[str] = None
-    type: Optional[str] = None
-    tags: Optional[List[str]] = None
-    notes: Optional[str] = None
+    hostname: Optional[str] = Field(None, max_length=255)  # RFC 1123 hostname max length
+    type: Optional[str] = Field(None, max_length=50)
+    tags: Optional[List[str]] = Field(None, max_length=20)  # Max 20 tags
+    notes: Optional[str] = Field(None, max_length=5000)
     icon: Optional[Icon] = None
     archived: Optional[bool] = None
 
@@ -115,6 +118,9 @@ class PatchSettingsRequest(BaseModel):
     reserved_defaults: Optional[Dict[str, bool]] = None
 
 class CreateUserRequest(BaseModel):
-    username: str
+    username: str = Field(max_length=50)  # Max length enforced by validation
     password: str
     role: Role = "readonly"
+
+class PasswordStrengthRequest(BaseModel):
+    password: str

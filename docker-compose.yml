@@ -5,9 +5,13 @@ services:
     environment:
       - DATA_DIR=/data
       - SECRET_KEY=change-me-to-a-long-random-string
+      # Set COOKIE_SECURE=true in production when using HTTPS
+      # For development, set to false
       - COOKIE_SECURE=false
     volumes:
       - ./appdata:/data
     ports:
       - "8080:8080"
     restart: unless-stopped
+    # Note: For production with HTTPS, deploy behind a reverse proxy (nginx, Traefik, Caddy)
+    # that handles TLS termination. Set COOKIE_SECURE=true in production.
